@@ -12,7 +12,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   {
-    href: '/',
+    href: '/?active=1&period=1d&cron=0',
     label: 'Dashboard',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
