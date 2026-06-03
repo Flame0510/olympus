@@ -4,7 +4,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { Session, TreeNode } from '@/lib/types';
-import { buildSessionTree, nodeLabel } from '@/lib/patterns/SessionFactory';
+import { buildSessionTree } from '@/lib/patterns/SessionFactory';
+import { nodeLabel } from '@/lib/patterns/sessionPresentation';
 
 interface SessionTopologyProps {
   sessions: Session[];

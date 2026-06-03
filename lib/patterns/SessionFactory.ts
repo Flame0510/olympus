@@ -1,6 +1,7 @@
 // Factory pattern: creates canonical Session objects from unknown raw input
-import type { Session, SessionEvent, TreeNode, SessionStatus } from '../types';
+import type { Session, SessionEvent, TreeNode } from '../types';
 import { adaptSession, adaptEvent } from './ApiAdapter';
+import { nodeLabel, shortLabel } from './sessionPresentation';
 
 /** Produces normalized Session instances from arbitrary raw data. */
 export class SessionFactory {
@@ -37,71 +38,6 @@ export function extractAgentId(sessionId: string): string {
   return sessionId.split(':')[1] ?? 'unknown';
 }
 
-export function shortLabel(sessionId: string): string {
-  if (!sessionId) return 'session';
-  const parts = sessionId.split(':');
-  if (parts.length >= 4) return `${parts[2]}:${parts[3].slice(0, 6)}`;
-  if (parts.length >= 2) return `${parts[1]}:${parts[parts.length - 1].slice(0, 6)}`;
-  return sessionId.slice(0, 14);
-}
-
-function normalizeDisplayLabel(value: string | null | undefined): string {
-  const label = String(value ?? '').trim();
-  if (!label) return '';
-  if (/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(label)) return '';
-  if (/^(agent:[^\s]+:subagent:[0-9a-f-]+|subagent:[0-9a-f-]{8,}|session:[0-9a-f-]{8,})$/i.test(label)) return '';
-  return label;
-}
-
-function prettifyAgentName(value: string): string {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function taskDerivedLabel(taskPreview: string | null | undefined): string {
-  const task = String(taskPreview ?? '').trim();
-  if (!task) return '';
-  if (/Sei Olympus Developer/i.test(task)) return 'Olympus Developer';
-  if (/Sei Olympus QA/i.test(task)) return 'Olympus QA';
-  if (/\bqa\b|test|smoke/i.test(task)) return 'QA 🧪';
-  if (/\bdev\b|fix|implement|bug|refactor|code/i.test(task)) return 'Dev 🛠️';
-  return '';
-}
-
-function subagentFallback(sessionId: string): string {
-  const suffix = sessionId.split(':').pop()?.replace(/[^a-z0-9]/gi, '').slice(0, 6) ?? '';
-  return suffix ? `Subagent ${suffix}` : 'Subagent';
-}
-
-export function nodeLabel(session: TreeNode & { lineage_label?: string | null; task_preview?: string | null }): string {
-  if (session._virtualRoot) return '';
-  if (session._agentNode) {
-    const raw = normalizeDisplayLabel((session as TreeNode & { name: string }).name);
-    return raw ? prettifyAgentName(raw) : 'Agent';
-  }
-
-  const sid = session.session_id || '';
-  const lineageLabel = normalizeDisplayLabel(session.lineage_label);
-  const directLabel = normalizeDisplayLabel(session.name || '');
-  const taskLabel = taskDerivedLabel(session.task_preview);
-
-  if (lineageLabel) return lineageLabel;
-  if (directLabel && !directLabel.startsWith('agent:')) return directLabel;
-  if (taskLabel) return taskLabel;
-
-  if (sid.endsWith(':main')) {
-    const agent = extractAgentId(sid);
-    if (agent) return prettifyAgentName(agent);
-  }
-
-  if (sid.startsWith('agent:ops:subagent:')) return subagentFallback(sid);
-  if (sid.startsWith('subagent:')) return subagentFallback(sid);
-
-  return shortLabel(sid);
-}
 
 export function isCronSession(sessionId: string): boolean {
   return sessionId.includes(':cron:');
