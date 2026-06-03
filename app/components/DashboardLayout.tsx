@@ -2,6 +2,7 @@
 // Main dashboard orchestrator — composes all panels using useDashboard hook
 
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { Costs } from '@/lib/types';
 import { useDashboard } from '@/lib/hooks/useDashboard';
 import DashboardHeader from './DashboardHeader';
@@ -38,6 +39,10 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  const resetButtonStyle: CSSProperties = isMobile
+    ? { width: '100%', justifyContent: 'center', minHeight: 38 }
+    : { flexShrink: 0, minWidth: 138 };
+
   return (
     <main className="shell">
       <DashboardHeader costs={costs} />
@@ -71,15 +76,19 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
       <section className="layout" style={isMobile ? { display: 'block', height: 'calc(100vh - 150px)' } : undefined}>
         {(!isMobile || mobileTab === 'graph') && (
           <article className="panel graph-panel" style={isMobile ? { height: '100%', borderRight: 'none' } : undefined}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0 }}>Session Topology</h2>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <div>
+                <h2 style={{ margin: 0 }}>Session Topology</h2>
+                <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 4 }}>Reset recenters and restores the graph zoom.</div>
+              </div>
               <button
                 type="button"
                 className="agent-btn"
+                aria-label="Reset graph view"
                 onClick={() => topologyRef.current?.resetView()}
-                style={{ flexShrink: 0, minWidth: isMobile ? 0 : 112 }}
+                style={resetButtonStyle}
               >
-                Reset view
+                ⊙ Reset graph view
               </button>
             </div>
             <SessionTopology

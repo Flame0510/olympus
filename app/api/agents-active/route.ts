@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import Database from 'better-sqlite3';
 import { NextResponse, type NextRequest } from 'next/server';
-import { openDb } from '@/lib/db';
+import { DB_PATH } from '@/lib/db';
 import { requireBrowserAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,13 @@ interface SessionRow {
 }
 
 const ALLOWED_EXT = new Set(['.md', '.json', '.txt']);
+const READONLY_DB_FALLBACKS = [
+  DB_PATH,
+  process.env.OLYMPUS_DB,
+  path.join(process.cwd(), 'events.db'),
+  '/data/.openclaw/workspace-ops/olympus-next-ts/events.db',
+  '/data/olympus/events.db',
+].filter((value, index, all): value is string => typeof value === 'string' && value.length > 0 && all.indexOf(value) === index);
 
 function mapWorkspace(agentId: string): string {
   if (agentId === 'ops') return '/data/.openclaw/workspace-ops/';
@@ -90,21 +98,59 @@ function readConfiguredAgents(): ConfiguredAgent[] {
   }
 }
 
+function isRecoverableReadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : '';
+  return [
+    'database disk image is malformed',
+    'file is not a database',
+    'unable to open database file',
+    'no such table: sessions',
+    'sql logic error',
+  ].some((needle) => message.includes(needle));
+}
+
+function loadRecentSessions(cutoff: number): SessionRow[] {
+  const warnings: string[] = [];
+
+  for (const dbPath of READONLY_DB_FALLBACKS) {
+    if (!fs.existsSync(dbPath)) {
+      warnings.push(`${dbPath}: missing`);
+      continue;
+    }
+
+    let db: Database.Database | null = null;
+    try {
+      db = new Database(dbPath, { readonly: true, fileMustExist: true });
+      const rows = db
+        .prepare(
+          `SELECT session_id, status, model, label, updated_at
+           FROM sessions WHERE updated_at >= ? ORDER BY updated_at DESC`,
+        )
+        .all(cutoff) as SessionRow[];
+      return rows;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      warnings.push(`${dbPath}: ${detail}`);
+      if (!isRecoverableReadError(error)) throw error;
+    } finally {
+      db?.close();
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn('[agents-active] falling back to empty activity list:', warnings.join(' | '));
+  }
+
+  return [];
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const denied = await requireBrowserAuth(request);
   if (denied) return denied;
   try {
-    const db = openDb();
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const configuredAgents = readConfiguredAgents();
-
-    const rows = db
-      .prepare(
-        `SELECT session_id, status, model, label, updated_at
-         FROM sessions WHERE updated_at >= ? ORDER BY updated_at DESC`,
-      )
-      .all(cutoff) as SessionRow[];
-    db.close();
+    const rows = loadRecentSessions(cutoff);
 
     const grouped = new Map<string, SessionRow[]>();
     for (const row of rows) {
