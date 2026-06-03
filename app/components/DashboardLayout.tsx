@@ -77,10 +77,7 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
         {(!isMobile || mobileTab === 'graph') && (
           <article className="panel graph-panel" style={isMobile ? { height: '100%', borderRight: 'none' } : undefined}>
             <div style={{ display: 'flex', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <div>
-                <h2 style={{ margin: 0 }}>Topologia Sessioni</h2>
-                <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 4 }}>Reset ricentra e ripristina lo zoom del grafo.</div>
-              </div>
+              <h2 style={{ margin: 0 }}>Topologia Sessioni</h2>
               <button
                 type="button"
                 className="agent-btn"
