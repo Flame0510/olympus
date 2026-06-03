@@ -96,7 +96,7 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
               sessions={visibleSessions}
               filter={filter.agent}
               onNodeClick={selectSession}
-              emptyMessage={filter.showOnlyActive ? 'No active sessions' : 'No sessions visible'}
+              emptyMessage={filter.showOnlyActive ? 'Nessuna sessione attiva nel periodo selezionato' : 'Nessuna sessione visibile con i filtri correnti'}
             />
           </article>
         )}
