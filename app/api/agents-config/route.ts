@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { NextResponse, type NextRequest } from 'next/server';
 import { requireAuth } from '@/lib/db';
 
@@ -40,13 +41,57 @@ interface UpdatePayload {
   telegramAccounts?: TelegramAccountUpdateInput[];
 }
 
+const OPENCLAW_CONFIG_PATH = '/data/.openclaw/openclaw.json';
+
 function readConfig(): OpenClawConfig {
-  const raw = fs.readFileSync('/data/.openclaw/openclaw.json', 'utf8');
+  const raw = fs.readFileSync(OPENCLAW_CONFIG_PATH, 'utf8');
   return JSON.parse(raw) as OpenClawConfig;
 }
 
+function formatBackupTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join('');
+}
+
 function writeConfig(config: OpenClawConfig): void {
-  fs.writeFileSync('/data/.openclaw/openclaw.json', `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  const configPath = OPENCLAW_CONFIG_PATH;
+  const configDir = path.dirname(configPath);
+  const configBase = path.basename(configPath);
+  const backupPath = path.join(configDir, `${configBase}.bak-${formatBackupTimestamp(new Date())}`);
+  const tempPath = path.join(configDir, `${configBase}.tmp-${process.pid}-${Date.now()}`);
+  const serializedConfig = `${JSON.stringify(config, null, 2)}\n`;
+
+  fs.copyFileSync(configPath, backupPath);
+
+  let tempFd: number | undefined;
+  let dirFd: number | undefined;
+
+  try {
+    tempFd = fs.openSync(tempPath, 'w', 0o600);
+    fs.writeFileSync(tempFd, serializedConfig, 'utf8');
+    fs.fsyncSync(tempFd);
+    fs.closeSync(tempFd);
+    tempFd = undefined;
+
+    fs.renameSync(tempPath, configPath);
+
+    dirFd = fs.openSync(configDir, 'r');
+    fs.fsyncSync(dirFd);
+    fs.closeSync(dirFd);
+    dirFd = undefined;
+  } catch (error) {
+    if (tempFd !== undefined) fs.closeSync(tempFd);
+    if (dirFd !== undefined) fs.closeSync(dirFd);
+    if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    throw error;
+  }
 }
 
 function pickOptional(source: JsonObject, keys: string[]): JsonObject {
