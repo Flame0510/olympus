@@ -41,6 +41,10 @@ interface AgentConfigRecord {
   };
 }
 
+interface EditableAgentConfig extends AgentConfigRecord {
+  currentId?: string;
+}
+
 interface TelegramAccountSummary {
   accountId: string;
   name?: string;
@@ -49,6 +53,11 @@ interface TelegramAccountSummary {
   defaultTo?: string | string[];
   dmPolicy?: string;
   tokenStatus?: 'masked' | 'present' | 'missing';
+}
+
+interface EditableTelegramAccount extends TelegramAccountSummary {
+  currentAccountId?: string;
+  tokenReplacement?: string;
 }
 
 interface TelegramBindingSummary {
@@ -103,6 +112,19 @@ function formatValue(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value.join(', ') : value;
 }
 
+function formatListInput(value: string | string[] | undefined): string {
+  if (!value) return '';
+  return Array.isArray(value) ? value.join(', ') : value;
+}
+
+function parseCsv(value: string): string[] | undefined {
+  const items = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}
+
 function badgeStyle(color: string): CSSProperties {
   return {
     display: 'inline-flex',
@@ -126,6 +148,50 @@ function metaLineStyle(): CSSProperties {
   };
 }
 
+function fieldStyle(): CSSProperties {
+  return {
+    width: '100%',
+    background: '#0A0A0B',
+    color: '#E8E8E8',
+    border: '1px solid var(--border)',
+    padding: '6px 8px',
+    fontSize: 11,
+    fontFamily: 'inherit',
+  };
+}
+
+function cloneAgentConfig(config?: AgentConfigRecord): EditableAgentConfig {
+  return {
+    currentId: config?.id ?? '',
+    id: config?.id ?? '',
+    name: config?.name ?? '',
+    label: config?.label ?? '',
+    workspace: config?.workspace ?? '',
+    agentDir: config?.agentDir ?? '',
+    model: config?.model ?? '',
+    defaultModel: config?.defaultModel ?? '',
+    default_model: config?.default_model ?? '',
+    identity: {
+      name: config?.identity?.name ?? '',
+      emoji: config?.identity?.emoji ?? '',
+    },
+  };
+}
+
+function cloneTelegramAccounts(accounts: TelegramAccountSummary[]): EditableTelegramAccount[] {
+  return accounts.map((account) => ({
+    currentAccountId: account.accountId,
+    accountId: account.accountId,
+    name: account.name ?? '',
+    enabled: account.enabled ?? false,
+    allowFrom: account.allowFrom ? [...account.allowFrom] : [],
+    defaultTo: Array.isArray(account.defaultTo) ? [...account.defaultTo] : account.defaultTo ?? '',
+    dmPolicy: account.dmPolicy ?? '',
+    tokenStatus: account.tokenStatus ?? 'missing',
+    tokenReplacement: '',
+  }));
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentChannels, setAgentChannels] = useState<Record<string, AgentChannelSummary>>({});
@@ -135,8 +201,11 @@ export default function AgentsPage() {
   const [mobileStep, setMobileStep] = useState(1);
   const [openDirs, setOpenDirs] = useState<Record<string, boolean>>({});
   const [savingState, setSavingState] = useState<SaveState>('idle');
+  const [configSavingState, setConfigSavingState] = useState<SaveState>('idle');
   const [loadingFile, setLoadingFile] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [editableConfig, setEditableConfig] = useState<EditableAgentConfig | null>(null);
+  const [editableAccounts, setEditableAccounts] = useState<EditableTelegramAccount[]>([]);
 
   const toggleDir = (dirName: string) =>
     setOpenDirs((prev) => ({ ...prev, [dirName]: !prev[dirName] }));
@@ -219,6 +288,47 @@ export default function AgentsPage() {
     }
   }
 
+  async function saveConfig() {
+    if (!editableConfig) return;
+    setConfigSavingState('saving');
+    try {
+      const payload = {
+        agents: [editableConfig],
+        telegramAccounts: editableAccounts.map((account) => ({
+          currentAccountId: account.currentAccountId,
+          accountId: account.accountId,
+          name: account.name,
+          enabled: !!account.enabled,
+          allowFrom: parseCsv(formatListInput(account.allowFrom)),
+          defaultTo: parseCsv(formatListInput(account.defaultTo)) ?? (typeof account.defaultTo === 'string' && account.defaultTo.trim() ? account.defaultTo.trim() : undefined),
+          dmPolicy: typeof account.dmPolicy === 'string' && account.dmPolicy.trim() ? account.dmPolicy.trim() : undefined,
+          tokenReplacement: account.tokenReplacement,
+        })),
+      };
+
+      const res = await fetch('/api/agents-config', {
+        method: 'PUT',
+        headers: { ...API_HEADERS, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('config save failed');
+      const data = (await res.json()) as { data?: AgentChannelSummary[] };
+      const nextChannels = Array.isArray(data.data)
+        ? Object.fromEntries(data.data.map((item) => [item.agentId, item]))
+        : agentChannels;
+      setAgentChannels(nextChannels);
+      const nextSelectedAgentId = editableConfig.id;
+      setSelectedAgentId(nextSelectedAgentId);
+      setEditableConfig(cloneAgentConfig(nextChannels[nextSelectedAgentId]?.config));
+      setEditableAccounts(cloneTelegramAccounts(nextChannels[nextSelectedAgentId]?.telegram.accounts ?? []));
+      setConfigSavingState('saved');
+      setTimeout(() => setConfigSavingState('idle'), 1500);
+      void fetchAgents();
+    } catch {
+      setConfigSavingState('error');
+    }
+  }
+
   useEffect(() => {
     void fetchAgents();
     const id = setInterval(() => void fetchAgents(), 15000);
@@ -232,6 +342,12 @@ export default function AgentsPage() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  useEffect(() => {
+    setEditableConfig(cloneAgentConfig(selectedAgentChannel?.config));
+    setEditableAccounts(cloneTelegramAccounts(selectedAgentChannel?.telegram.accounts ?? []));
+    setConfigSavingState('idle');
+  }, [selectedAgentChannel]);
+
   const saveLabel =
     savingState === 'saving'
       ? 'Saving...'
@@ -240,6 +356,15 @@ export default function AgentsPage() {
         : savingState === 'error'
           ? 'Error ✗'
           : 'SAVE';
+
+  const configSaveLabel =
+    configSavingState === 'saving'
+      ? 'Saving...'
+      : configSavingState === 'saved'
+        ? 'Saved ✓'
+        : configSavingState === 'error'
+          ? 'Error ✗'
+          : 'SAVE CONFIG';
 
   const typeColor = (type: string) =>
     type === 'markdown' ? '#B87333' : type === 'json' ? '#60a5fa' : '#888';
@@ -294,7 +419,7 @@ export default function AgentsPage() {
       {isMobile && (
         <div style={{ display: 'flex', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)' }}>
           <button onClick={() => setMobileStep(1)} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid var(--border)', background: mobileStep === 1 ? 'var(--bg3)' : 'transparent', color: mobileStep === 1 ? 'var(--copper)' : '#888' }}>AGENTS</button>
-          <button onClick={() => setMobileStep(2)} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid var(--border)', background: mobileStep === 2 ? 'var(--bg3)' : 'transparent', color: mobileStep === 2 ? 'var(--copper)' : '#888' }}>FILES</button>
+          <button onClick={() => setMobileStep(2)} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid var(--border)', background: mobileStep === 2 ? 'var(--bg3)' : 'transparent', color: mobileStep === 2 ? 'var(--copper)' : '#888' }}>FILES + CONFIG</button>
           <button onClick={() => setMobileStep(3)} disabled={!selectedFilePath} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid var(--border)', background: mobileStep === 3 ? 'var(--bg3)' : 'transparent', color: mobileStep === 3 ? 'var(--copper)' : '#888', opacity: selectedFilePath ? 1 : 0.5 }}>EDITOR</button>
         </div>
       )}
@@ -397,24 +522,34 @@ export default function AgentsPage() {
             }}
           >
             <div>{selectedAgent ? selectedAgent.workspace_path : 'No agent selected'}</div>
-            {selectedAgentChannel && (
+            {selectedAgentChannel && editableConfig && (
               <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
                 <div style={{ padding: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                   <div style={{ color: 'var(--copper)', fontSize: 10, marginBottom: 6 }}>AGENT CONFIG</div>
-                  <div>id: {selectedAgentChannel.config.id}</div>
-                  <div>name: {selectedAgentChannel.config.name ?? selectedAgentChannel.config.label ?? '—'}</div>
-                  <div>model: {selectedAgentChannel.config.model ?? selectedAgentChannel.config.defaultModel ?? selectedAgentChannel.config.default_model ?? '—'}</div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    <input value={editableConfig.id ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, id: e.target.value } : prev))} placeholder="id" style={fieldStyle()} />
+                    <input value={editableConfig.name ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, name: e.target.value } : prev))} placeholder="name" style={fieldStyle()} />
+                    <input value={editableConfig.label ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, label: e.target.value } : prev))} placeholder="label" style={fieldStyle()} />
+                    <input value={editableConfig.workspace ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, workspace: e.target.value } : prev))} placeholder="workspace" style={fieldStyle()} />
+                    <input value={editableConfig.agentDir ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, agentDir: e.target.value } : prev))} placeholder="agentDir" style={fieldStyle()} />
+                    <input value={editableConfig.model ?? ''} onChange={(e) => setEditableConfig((prev) => (prev ? { ...prev, model: e.target.value } : prev))} placeholder="model" style={fieldStyle()} />
+                  </div>
                 </div>
                 <div style={{ padding: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                   <div style={{ color: 'var(--copper)', fontSize: 10, marginBottom: 6 }}>TELEGRAM</div>
-                  {selectedAgentChannel.telegram.accounts.length ? (
-                    selectedAgentChannel.telegram.accounts.map((account) => (
-                      <div key={account.accountId} style={{ marginTop: 6 }}>
-                        <div>account: {account.accountId}</div>
-                        <div>enabled: {typeof account.enabled === 'boolean' ? String(account.enabled) : '—'}</div>
-                        <div>dmPolicy: {account.dmPolicy ?? '—'}</div>
-                        <div>allowFrom: {formatValue(account.allowFrom)}</div>
-                        <div>defaultTo: {formatValue(account.defaultTo)}</div>
+                  {editableAccounts.length ? (
+                    editableAccounts.map((account, index) => (
+                      <div key={`${account.currentAccountId ?? account.accountId}-${index}`} style={{ marginTop: index ? 10 : 0, display: 'grid', gap: 6, borderTop: index ? '1px solid var(--border)' : 'none', paddingTop: index ? 10 : 0 }}>
+                        <input value={account.accountId} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, accountId: e.target.value } : item))} placeholder="accountId" style={fieldStyle()} />
+                        <input value={account.name ?? ''} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, name: e.target.value } : item))} placeholder="name" style={fieldStyle()} />
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#E8E8E8' }}>
+                          <input type="checkbox" checked={!!account.enabled} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: e.target.checked } : item))} />
+                          enabled
+                        </label>
+                        <input value={formatListInput(account.allowFrom)} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, allowFrom: parseCsv(e.target.value) ?? [] } : item))} placeholder="allowFrom (csv)" style={fieldStyle()} />
+                        <input value={formatListInput(account.defaultTo)} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, defaultTo: e.target.value } : item))} placeholder="defaultTo (csv or single)" style={fieldStyle()} />
+                        <input value={account.dmPolicy ?? ''} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, dmPolicy: e.target.value } : item))} placeholder="dmPolicy" style={fieldStyle()} />
+                        <input value={account.tokenReplacement ?? ''} onChange={(e) => setEditableAccounts((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, tokenReplacement: e.target.value } : item))} placeholder="tokenReplacement (write-only)" style={fieldStyle()} />
                         <div>token: {account.tokenStatus ?? 'missing'}</div>
                       </div>
                     ))
@@ -424,6 +559,7 @@ export default function AgentsPage() {
                 </div>
                 <div style={{ padding: 8, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
                   <div style={{ color: 'var(--copper)', fontSize: 10, marginBottom: 6 }}>BINDINGS</div>
+                  <div style={{ color: '#888', marginBottom: 6 }}>Read-only / locked</div>
                   {selectedAgentChannel.telegram.bindings.length ? (
                     selectedAgentChannel.telegram.bindings.map((binding, index) => (
                       <div key={`${binding.agentId ?? selectedAgentChannel.agentId}-${index}`} style={{ marginTop: index ? 8 : 0 }}>
@@ -441,6 +577,21 @@ export default function AgentsPage() {
                     <div>No Telegram routing active</div>
                   )}
                 </div>
+                <button
+                  onClick={() => void saveConfig()}
+                  disabled={!editableConfig || configSavingState === 'saving'}
+                  style={{
+                    border: '1px solid var(--border)',
+                    background: configSavingState === 'saved' ? '#143018' : 'var(--bg3)',
+                    color: configSavingState === 'error' ? '#ef4444' : configSavingState === 'saved' ? '#22c55e' : 'var(--copper)',
+                    padding: '8px 10px',
+                    fontFamily: 'inherit',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {configSaveLabel}
+                </button>
               </div>
             )}
           </div>

@@ -5,24 +5,48 @@ import { requireAuth } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 type JsonObject = Record<string, unknown>;
-
 type TokenStatus = 'masked' | 'present' | 'missing';
 
 interface OpenClawConfig {
   agents?: {
     list?: JsonObject[];
+    [key: string]: unknown;
   };
   channels?: {
     telegram?: {
       accounts?: Record<string, JsonObject>;
+      [key: string]: unknown;
     };
+    [key: string]: unknown;
   };
   bindings?: JsonObject[];
+  [key: string]: unknown;
+}
+
+interface AgentUpdateInput extends JsonObject {
+  currentId?: string;
+  id?: string;
+  name?: string;
+}
+
+interface TelegramAccountUpdateInput extends JsonObject {
+  currentAccountId?: string;
+  accountId?: string;
+  tokenReplacement?: string;
+}
+
+interface UpdatePayload {
+  agents?: AgentUpdateInput[];
+  telegramAccounts?: TelegramAccountUpdateInput[];
 }
 
 function readConfig(): OpenClawConfig {
   const raw = fs.readFileSync('/data/.openclaw/openclaw.json', 'utf8');
   return JSON.parse(raw) as OpenClawConfig;
+}
+
+function writeConfig(config: OpenClawConfig): void {
+  fs.writeFileSync('/data/.openclaw/openclaw.json', `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
 function pickOptional(source: JsonObject, keys: string[]): JsonObject {
@@ -66,54 +90,229 @@ function sanitizeBinding(binding: JsonObject): JsonObject {
   };
 }
 
+function normalizeString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function cloneJsonObject(value: unknown): JsonObject {
+  return value && typeof value === 'object' && !Array.isArray(value) ? { ...(value as JsonObject) } : {};
+}
+
+function ensureStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`${field} must be an array of strings`);
+  }
+  return [...value];
+}
+
+function ensureStringOrStringArray(value: unknown, field: string): string | string[] | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && value.every((item) => typeof item === 'string')) return [...value];
+  throw new Error(`${field} must be a string or array of strings`);
+}
+
+function ensureBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${field} must be a boolean`);
+  return value;
+}
+
+function normalizeAgentUpdate(input: AgentUpdateInput): JsonObject {
+  const id = normalizeString(input.id);
+  const name = normalizeString(input.name);
+  if (!id) throw new Error('agent id is required');
+  if (!name) throw new Error('agent name is required');
+
+  const next: JsonObject = {
+    id,
+    name,
+  };
+
+  for (const key of ['label', 'workspace', 'agentDir', 'model', 'defaultModel', 'default_model']) {
+    if (input[key] !== undefined) next[key] = input[key];
+  }
+
+  if (input.identity !== undefined) {
+    if (input.identity && typeof input.identity === 'object' && !Array.isArray(input.identity)) {
+      next.identity = { ...(input.identity as JsonObject) };
+    } else {
+      throw new Error('identity must be an object');
+    }
+  }
+
+  return next;
+}
+
+function normalizeTelegramAccountUpdate(input: TelegramAccountUpdateInput): { accountId: string; patch: JsonObject; tokenReplacement?: string } {
+  const accountId = normalizeString(input.accountId);
+  if (!accountId) throw new Error('telegram account id is required');
+
+  const patch: JsonObject = { accountId };
+  if (input.name !== undefined) patch.name = input.name;
+  if (input.enabled !== undefined) patch.enabled = ensureBoolean(input.enabled, 'telegram enabled');
+  if (input.allowFrom !== undefined) patch.allowFrom = ensureStringArray(input.allowFrom, 'telegram allowFrom');
+  if (input.defaultTo !== undefined) patch.defaultTo = ensureStringOrStringArray(input.defaultTo, 'telegram defaultTo');
+  if (input.dmPolicy !== undefined) patch.dmPolicy = input.dmPolicy;
+
+  let tokenReplacement: string | undefined;
+  if (input.tokenReplacement !== undefined) {
+    if (typeof input.tokenReplacement !== 'string') throw new Error('tokenReplacement must be a string');
+    tokenReplacement = input.tokenReplacement.trim();
+  }
+
+  return { accountId, patch, tokenReplacement };
+}
+
+function buildConfigPayload(config: OpenClawConfig) {
+  const agents = Array.isArray(config.agents?.list) ? config.agents.list : [];
+  const telegramAccounts = config.channels?.telegram?.accounts ?? {};
+  const bindings = Array.isArray(config.bindings) ? config.bindings : [];
+
+  return agents
+    .filter((agent): agent is JsonObject => !!agent && typeof agent.id === 'string')
+    .map((agent) => {
+      const agentId = String(agent.id);
+      const agentBindings = bindings.filter(
+        (binding) => !!binding && typeof binding.agentId === 'string' && binding.agentId === agentId,
+      );
+      const telegramAccountIds = Array.from(
+        new Set(
+          agentBindings
+            .map((binding) => {
+              const match = typeof binding.match === 'object' && binding.match !== null ? (binding.match as JsonObject) : null;
+              if (!match || match.channel !== 'telegram' || typeof match.accountId !== 'string') return null;
+              return match.accountId;
+            })
+            .filter((value): value is string => typeof value === 'string'),
+        ),
+      );
+
+      return {
+        agentId,
+        config: sanitizeAgent(agent),
+        telegram: {
+          accounts: telegramAccountIds.map((accountId) => sanitizeTelegramAccount(accountId, telegramAccounts[accountId] ?? {})),
+          bindings: agentBindings
+            .filter((binding) => {
+              const match = typeof binding.match === 'object' && binding.match !== null ? (binding.match as JsonObject) : null;
+              return match?.channel === 'telegram';
+            })
+            .map(sanitizeBinding),
+        },
+      };
+    });
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const denied = requireAuth(request);
   if (denied) return denied;
 
   try {
-    const config = readConfig();
-    const agents = Array.isArray(config.agents?.list) ? config.agents.list : [];
-    const telegramAccounts = config.channels?.telegram?.accounts ?? {};
-    const bindings = Array.isArray(config.bindings) ? config.bindings : [];
-
-    const payload = agents
-      .filter((agent): agent is JsonObject => !!agent && typeof agent.id === 'string')
-      .map((agent) => {
-        const agentId = String(agent.id);
-        const agentBindings = bindings.filter(
-          (binding) => !!binding && typeof binding.agentId === 'string' && binding.agentId === agentId,
-        );
-        const telegramAccountIds = Array.from(
-          new Set(
-            agentBindings
-              .map((binding) => {
-                const match = typeof binding.match === 'object' && binding.match !== null ? (binding.match as JsonObject) : null;
-                if (!match || match.channel !== 'telegram' || typeof match.accountId !== 'string') return null;
-                return match.accountId;
-              })
-              .filter((value): value is string => typeof value === 'string'),
-          ),
-        );
-
-        return {
-          agentId,
-          config: sanitizeAgent(agent),
-          telegram: {
-            accounts: telegramAccountIds.map((accountId) =>
-              sanitizeTelegramAccount(accountId, telegramAccounts[accountId] ?? {}),
-            ),
-            bindings: agentBindings
-              .filter((binding) => {
-                const match = typeof binding.match === 'object' && binding.match !== null ? (binding.match as JsonObject) : null;
-                return match?.channel === 'telegram';
-              })
-              .map(sanitizeBinding),
-          },
-        };
-      });
-
-    return NextResponse.json(payload);
+    return NextResponse.json(buildConfigPayload(readConfig()));
   } catch (error: unknown) {
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest): Promise<NextResponse> {
+  const denied = requireAuth(request);
+  if (denied) return denied;
+
+  try {
+    const body = (await request.json()) as UpdatePayload;
+    const config = readConfig();
+    const currentAgents = Array.isArray(config.agents?.list) ? config.agents.list : [];
+    const currentAccounts = config.channels?.telegram?.accounts ?? {};
+
+    let nextAgents = currentAgents.map((agent) => cloneJsonObject(agent));
+    let nextAccounts = Object.fromEntries(
+      Object.entries(currentAccounts).map(([accountId, account]) => [accountId, cloneJsonObject(account)]),
+    ) as Record<string, JsonObject>;
+
+    if (body.agents !== undefined) {
+      if (!Array.isArray(body.agents)) throw new Error('agents must be an array');
+      const updates = new Map<string, JsonObject>();
+      for (const input of body.agents) {
+        const currentId = normalizeString(input.currentId) || normalizeString(input.id);
+        const existingMatch = currentAgents.find((agent) => cloneJsonObject(agent).id === currentId);
+        if (!existingMatch) throw new Error(`unknown agent: ${currentId}`);
+        const normalized = normalizeAgentUpdate(input);
+        const merged = { ...cloneJsonObject(existingMatch), ...normalized };
+        updates.set(currentId, merged);
+      }
+
+      nextAgents = currentAgents.map((agent) => {
+        const currentId = normalizeString(cloneJsonObject(agent).id);
+        return updates.get(currentId) ?? cloneJsonObject(agent);
+      });
+
+      const finalIds = new Set<string>();
+      for (const agent of nextAgents) {
+        const agentId = normalizeString(agent.id);
+        if (!agentId) throw new Error('agent id is required');
+        if (!normalizeString(agent.name)) throw new Error(`agent name is required for ${agentId}`);
+        if (finalIds.has(agentId)) throw new Error(`duplicate agent id: ${agentId}`);
+        finalIds.add(agentId);
+      }
+    }
+
+    if (body.telegramAccounts !== undefined) {
+      if (!Array.isArray(body.telegramAccounts)) throw new Error('telegramAccounts must be an array');
+      const updates = new Map<string, { accountId: string; value: JsonObject }>();
+      for (const input of body.telegramAccounts) {
+        const currentAccountId = normalizeString(input.currentAccountId) || normalizeString(input.accountId);
+        const currentValue = currentAccounts[currentAccountId];
+        if (!currentValue || typeof currentValue !== 'object') throw new Error(`unknown telegram account: ${currentAccountId}`);
+        const existing = cloneJsonObject(currentValue);
+        const { accountId, patch, tokenReplacement } = normalizeTelegramAccountUpdate(input);
+        const merged = { ...existing, ...patch };
+        delete merged.accountId;
+        if (tokenReplacement) {
+          if (typeof existing.botToken === 'string') merged.botToken = tokenReplacement;
+          else if (typeof existing.token === 'string') merged.token = tokenReplacement;
+          else merged.botToken = tokenReplacement;
+        }
+        updates.set(currentAccountId, { accountId, value: merged });
+      }
+
+      const rebuiltAccounts: Record<string, JsonObject> = {};
+      for (const [existingId, account] of Object.entries(currentAccounts)) {
+        const updated = updates.get(existingId);
+        const targetId = updated?.accountId ?? existingId;
+        if (rebuiltAccounts[targetId]) throw new Error(`duplicate telegram account id: ${targetId}`);
+        rebuiltAccounts[targetId] = updated?.value ?? cloneJsonObject(account);
+      }
+
+      const finalIds = new Set<string>();
+      for (const accountId of Object.keys(rebuiltAccounts)) {
+        const normalizedId = normalizeString(accountId);
+        if (!normalizedId) throw new Error('telegram account id is required');
+        if (finalIds.has(normalizedId)) throw new Error(`duplicate telegram account id: ${normalizedId}`);
+        finalIds.add(normalizedId);
+      }
+      nextAccounts = rebuiltAccounts;
+    }
+
+    const nextConfig: OpenClawConfig = {
+      ...config,
+      agents: {
+        ...(config.agents ?? {}),
+        list: nextAgents,
+      },
+      channels: {
+        ...(config.channels ?? {}),
+        telegram: {
+          ...(config.channels?.telegram ?? {}),
+          accounts: nextAccounts,
+        },
+      },
+    };
+
+    writeConfig(nextConfig);
+    return NextResponse.json({ ok: true, restartRequired: true, data: buildConfigPayload(nextConfig) });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error as Error).message }, { status: 400 });
   }
 }
