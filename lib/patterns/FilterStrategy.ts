@@ -41,7 +41,10 @@ export class PeriodFilterStrategy implements IFilterStrategy {
 
   filter(sessions: Session[]): Session[] {
     if (this.cutoff === 0) return sessions;
-    return sessions.filter((s) => Number(s.started_at ?? 0) >= this.cutoff);
+    return sessions.filter((s) => {
+      const latest = Math.max(Number(s.started_at ?? 0), Number(s.updated_at ?? 0));
+      return latest >= this.cutoff;
+    });
   }
 }
 
