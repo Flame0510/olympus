@@ -60,7 +60,7 @@ function sanitizeBinding(binding: JsonObject): JsonObject {
     ...pickOptional(binding, ['type', 'agentId', 'enabled', 'allowFrom', 'defaultTo', 'dmPolicy']),
     ...(match
       ? {
-          match: pickOptional(match, ['channel', 'accountId', 'from', 'to']),
+          match: pickOptional(match, ['channel', 'accountId', 'from', 'to', 'peer']),
         }
       : {}),
   };

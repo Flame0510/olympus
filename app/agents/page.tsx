@@ -63,6 +63,7 @@ interface TelegramBindingSummary {
     accountId?: string;
     from?: string;
     to?: string;
+    peer?: string;
   };
 }
 
@@ -429,6 +430,7 @@ export default function AgentsPage() {
                         <div>type: {binding.type ?? '—'}</div>
                         <div>channel: {binding.match?.channel ?? '—'}</div>
                         <div>accountId: {binding.match?.accountId ?? '—'}</div>
+                        <div>peer: {binding.match?.peer ?? '—'}</div>
                         <div>enabled: {typeof binding.enabled === 'boolean' ? String(binding.enabled) : '—'}</div>
                         <div>allowFrom: {formatValue(binding.allowFrom)}</div>
                         <div>defaultTo: {formatValue(binding.defaultTo)}</div>
