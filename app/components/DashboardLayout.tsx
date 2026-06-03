@@ -1,14 +1,14 @@
 'use client';
 // Main dashboard orchestrator — composes all panels using useDashboard hook
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Costs } from '@/lib/types';
 import { useDashboard } from '@/lib/hooks/useDashboard';
 import DashboardHeader from './DashboardHeader';
 import DashboardToolbar from './DashboardToolbar';
 import LiveFeed from './LiveFeed';
 import CostBreakdown from './CostBreakdown';
-import SessionTopology from './SessionTopology';
+import SessionTopology, { type SessionTopologyHandle } from './SessionTopology';
 import SessionDrawer from './SessionDrawer';
 
 interface DashboardLayoutProps {
@@ -27,6 +27,7 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
     selectSession,
   } = useDashboard({ initialCosts });
 
+  const topologyRef = useRef<SessionTopologyHandle>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileTab, setMobileTab] = useState<'graph' | 'feed' | 'costs'>('graph');
 
@@ -70,8 +71,19 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
       <section className="layout" style={isMobile ? { display: 'block', height: 'calc(100vh - 150px)' } : undefined}>
         {(!isMobile || mobileTab === 'graph') && (
           <article className="panel graph-panel" style={isMobile ? { height: '100%', borderRight: 'none' } : undefined}>
-            <h2>Session Topology</h2>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0 }}>Session Topology</h2>
+              <button
+                type="button"
+                className="agent-btn"
+                onClick={() => topologyRef.current?.resetView()}
+                style={{ flexShrink: 0, minWidth: isMobile ? 0 : 112 }}
+              >
+                Reset view
+              </button>
+            </div>
             <SessionTopology
+              ref={topologyRef}
               sessions={visibleSessions}
               filter={filter.agent}
               onNodeClick={selectSession}

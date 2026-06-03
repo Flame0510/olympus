@@ -1,7 +1,7 @@
 // @ts-nocheck
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import type { Session, TreeNode } from '@/lib/types';
 import { buildSessionTree, nodeLabel } from '@/lib/patterns/SessionFactory';
@@ -11,6 +11,10 @@ interface SessionTopologyProps {
   filter: string;
   onNodeClick: (sessionId: string) => void;
   emptyMessage?: string;
+}
+
+export interface SessionTopologyHandle {
+  resetView: () => void;
 }
 
 function formatCost(value: number | null | undefined): string {
@@ -25,12 +29,14 @@ function draw(
   treeData: TreeNode,
   isTouch: boolean,
   onNodeClick: (id: string) => void,
+  registerReset: (reset: () => void) => void,
 ) {
   const svg = d3.select(svgEl);
   svg.selectAll('*').remove();
   svg.attr('viewBox', `0 0 ${width} ${height}`);
 
-  const g = svg.append('g').attr('transform', 'translate(40,20)');
+  const g = svg.append('g');
+  const content = g.append('g').attr('transform', 'translate(40,20)');
 
   const zoom = d3.zoom<SVGSVGElement, unknown>()
     .scaleExtent([0.2, 5])
@@ -46,7 +52,8 @@ function draw(
     .x((d) => d.y)
     .y((d) => d.x);
 
-  g.selectAll('.link')
+  content
+    .selectAll('.link')
     .data(root.links().filter((l) => !l.source.data._virtualRoot))
     .join('path')
     .attr('class', 'link')
@@ -63,7 +70,7 @@ function draw(
     onNodeClick(id);
   };
 
-  const node = g
+  const node = content
     .selectAll<SVGGElement, d3.HierarchyPointNode<TreeNode>>('.node')
     .data(root.descendants().filter((d) => !d.data._virtualRoot))
     .join('g')
@@ -112,15 +119,55 @@ function draw(
     .attr('text-anchor', 'middle')
     .style('font-size', '10px')
     .style('fill', '#89a1ad');
+
+  const resetView = () => {
+    const contentNode = content.node();
+    if (!contentNode) return;
+
+    const bbox = contentNode.getBBox();
+    if (!bbox.width || !bbox.height) {
+      svg.transition().duration(250).call(zoom.transform, d3.zoomIdentity.translate(40, 20));
+      return;
+    }
+
+    const padX = isTouch ? 24 : 48;
+    const padY = isTouch ? 24 : 36;
+    const scale = Math.max(
+      0.2,
+      Math.min(
+        1.5,
+        (width - padX * 2) / bbox.width,
+        (height - padY * 2) / bbox.height,
+      ),
+    );
+    const tx = width / 2 - (bbox.x + bbox.width / 2) * scale;
+    const ty = height / 2 - (bbox.y + bbox.height / 2) * scale;
+
+    svg
+      .transition()
+      .duration(250)
+      .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+  };
+
+  registerReset(resetView);
+  requestAnimationFrame(resetView);
 }
 
-export default function SessionTopology({ sessions, filter, onNodeClick, emptyMessage = 'No sessions visible' }: SessionTopologyProps) {
+const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(function SessionTopology(
+  { sessions, filter, onNodeClick, emptyMessage = 'No sessions visible' },
+  ref,
+) {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const resetRef = useRef<() => void>(() => {});
   const [isTouch, setIsTouch] = useState(false);
 
   const treeData = useMemo(() => buildSessionTree(sessions, filter), [sessions, filter]);
   const hasVisibleNodes = useMemo(() => (treeData.children ?? []).some((node) => node._agentNode ? (node.children?.length ?? 0) > 0 : true), [treeData]);
+
+  useImperativeHandle(ref, () => ({
+    resetView: () => resetRef.current(),
+  }), []);
 
   useEffect(() => {
     const check = () => {
@@ -133,6 +180,12 @@ export default function SessionTopology({ sessions, filter, onNodeClick, emptyMe
   }, []);
 
   useEffect(() => {
+    if (!hasVisibleNodes) {
+      resetRef.current = () => {};
+    }
+  }, [hasVisibleNodes]);
+
+  useEffect(() => {
     const svgEl = svgRef.current;
     const tooltipEl = tooltipRef.current;
     if (!svgEl || !hasVisibleNodes) return;
@@ -140,7 +193,9 @@ export default function SessionTopology({ sessions, filter, onNodeClick, emptyMe
     const render = () => {
       const width = svgEl.clientWidth || 900;
       const height = svgEl.clientHeight || 480;
-      draw(svgEl, tooltipEl, width, height, treeData, isTouch, onNodeClick);
+      draw(svgEl, tooltipEl, width, height, treeData, isTouch, onNodeClick, (reset) => {
+        resetRef.current = reset;
+      });
     };
 
     render();
@@ -155,4 +210,6 @@ export default function SessionTopology({ sessions, filter, onNodeClick, emptyMe
       <div ref={tooltipRef} className="graph-tooltip" />
     </div>
   );
-}
+});
+
+export default SessionTopology;
