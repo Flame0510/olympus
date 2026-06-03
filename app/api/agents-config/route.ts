@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth } from '@/lib/db';
+import { requireBrowserAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -365,7 +365,7 @@ function buildConfigPayload(config: OpenClawConfig) {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
+  const denied = await requireBrowserAuth(request);
   if (denied) return denied;
 
   try {
@@ -376,7 +376,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
+  const denied = await requireBrowserAuth(request);
   if (denied) return denied;
 
   try {

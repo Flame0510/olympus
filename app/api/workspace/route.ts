@@ -1,6 +1,6 @@
 import fs from 'fs';
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth } from '@/lib/db';
+import { requireBrowserAuth } from '@/lib/auth';
 
 const ALLOWED_PREFIX = '/data/.openclaw/';
 
@@ -10,7 +10,7 @@ function isAllowedPath(path: unknown): path is string {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
+  const denied = await requireBrowserAuth(request);
   if (denied) return denied;
   const path = new URL(request.url).searchParams.get('path');
   if (!isAllowedPath(path)) return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
+  const denied = await requireBrowserAuth(request);
   if (denied) return denied;
   try {
     const body = (await request.json()) as { path?: unknown; content?: unknown };

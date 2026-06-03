@@ -3,14 +3,12 @@ import type { Session, SessionDetail, Costs, SessionEvent } from '../types';
 import { SessionFactory, EventFactory } from './SessionFactory';
 import { adaptCosts, adaptSession, adaptEvent } from './ApiAdapter';
 
-const TOKEN = 'olympus2026';
-
-function authHeaders(): HeadersInit {
-  return { authorization: `Bearer ${TOKEN}` };
-}
-
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { ...authHeaders(), ...init?.headers } });
+  const res = await fetch(path, {
+    ...init,
+    credentials: 'same-origin',
+    headers: { ...init?.headers },
+  });
   const data = await res.json();
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
   return data as T;

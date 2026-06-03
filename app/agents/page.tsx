@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 
-const TOKEN = '***';
-const API_HEADERS = { Authorization: `Bearer ${TOKEN}` };
+const API_FETCH_OPTIONS: RequestInit = {
+  cache: 'no-store',
+  credentials: 'same-origin',
+};
 
 interface AgentFile {
   path: string;
@@ -312,8 +314,8 @@ export default function AgentsPage() {
   async function fetchAgents() {
     try {
       const [agentsRes, channelsRes] = await Promise.all([
-        fetch('/api/agents-active', { headers: API_HEADERS, cache: 'no-store' }),
-        fetch('/api/agents-config', { headers: API_HEADERS, cache: 'no-store' }),
+        fetch('/api/agents-active', API_FETCH_OPTIONS),
+        fetch('/api/agents-config', API_FETCH_OPTIONS),
       ]);
       if (!agentsRes.ok || !channelsRes.ok) return;
       const agentData = (await agentsRes.json()) as Agent[];
@@ -332,7 +334,7 @@ export default function AgentsPage() {
     setSelectedFilePath(path);
     setSavingState('idle');
     try {
-      const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, { headers: API_HEADERS, cache: 'no-store' });
+      const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, API_FETCH_OPTIONS);
       if (!res.ok) throw new Error('load failed');
       const data = (await res.json()) as { content?: string };
       setEditorContent(data.content ?? '');
@@ -351,7 +353,8 @@ export default function AgentsPage() {
     try {
       const res = await fetch('/api/workspace', {
         method: 'PUT',
-        headers: { ...API_HEADERS, 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: selectedFilePath, content: editorContent }),
       });
       if (!res.ok) throw new Error('save failed');
@@ -433,7 +436,8 @@ export default function AgentsPage() {
 
       const res = await fetch('/api/agents-config', {
         method: 'PUT',
-        headers: { ...API_HEADERS, 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       const data = (await res.json()) as { error?: string; data?: AgentChannelSummary[] };
