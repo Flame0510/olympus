@@ -25,6 +25,14 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<SessionDetail | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   useEffect(() => {
     if (!sessionId) {
@@ -60,8 +68,32 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
   const endedOrUpdated = session?.ended_at ?? session?.updated_at ?? null;
 
   return (
-    <aside
-      style={{
+    <>
+      {isMobile && (
+        <div
+          onClick={onClose}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 299,
+            background: 'rgba(0,0,0,0.5)',
+          }}
+        />
+      )}
+      <aside
+      style={isMobile ? {
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 300,
+        width: '100%',
+        maxHeight: '75vh',
+        overflowY: 'auto',
+        background: 'var(--bg)',
+        borderTop: '1px solid var(--border)',
+        borderRadius: '14px 14px 0 0',
+        color: 'var(--text)',
+        padding: '20px 14px 28px',
+      } : {
         position: 'fixed',
         right: 0,
         top: 0,
@@ -76,13 +108,18 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
         padding: '20px 14px 14px',
       }}
     >
+      {isMobile && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, marginTop: -8 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)' }} />
+        </div>
+      )}
       <button
         type="button"
         onClick={onClose}
         aria-label="Chiudi"
         style={{
           position: 'absolute',
-          top: 14,
+          top: isMobile ? 16 : 14,
           right: 14,
           border: 'none',
           background: 'transparent',
@@ -162,6 +199,7 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
         </>
       )}
     </aside>
+    </>
   );
 }
 
