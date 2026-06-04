@@ -169,7 +169,7 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
 
 function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div style={{ borderTop: '1px solid var(--border)', marginTop: title ? 14 : 0, paddingTop: 10 }}>
+    <div style={{ borderTop: title ? '1px solid var(--border)' : 'none', marginTop: title ? 14 : 0, paddingTop: title ? 10 : 0 }}>
       {title && (
         <div style={{ fontSize: 12, color: 'var(--copper)', marginBottom: 8 }}>{title}</div>
       )}
