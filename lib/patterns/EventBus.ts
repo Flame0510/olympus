@@ -42,7 +42,9 @@ class OlympusEventBusClass {
 
   private connect(): void {
     this.disconnect();
-    this.source = new EventSource('/api/stream');
+    // EventSource cannot send headers; pass token via query param for browser auth
+    const token = process.env.NEXT_PUBLIC_OLYMPUS_TOKEN ?? 'olympus2026';
+    this.source = new EventSource(`/api/stream?token=${encodeURIComponent(token)}`);
 
     this.source.onmessage = (e: MessageEvent<string>) => {
       try {
