@@ -2,6 +2,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as d3 from 'd3';
 import type { Session, TreeNode } from '@/lib/types';
 import { buildSessionTree } from '@/lib/patterns/SessionFactory';
@@ -79,10 +80,14 @@ function draw(
     .attr('transform', (d) => `translate(${d.y},${d.x})`)
     .on('mousemove', (event: MouseEvent, d) => {
       if (isTouch || !tooltipEl) return;
-      const rect = svgEl.getBoundingClientRect();
       tooltipEl.style.display = 'block';
-      tooltipEl.style.left = `${event.clientX - rect.left + 18}px`;
-      tooltipEl.style.top = `${event.clientY - rect.top + 18}px`;
+      const tx = event.clientX + 18;
+      const ty = event.clientY + 18;
+      // Keep tooltip inside viewport
+      const tw = tooltipEl.offsetWidth || 200;
+      const th = tooltipEl.offsetHeight || 80;
+      tooltipEl.style.left = `${Math.min(tx, window.innerWidth - tw - 8)}px`;
+      tooltipEl.style.top = `${Math.min(ty, window.innerHeight - th - 8)}px`;
       tooltipEl.innerHTML = [
         `<div><strong>${nodeLabel(d.data)}</strong></div>`,
         `<div>modello: ${d.data.model ?? '-'}</div>`,
@@ -206,17 +211,22 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
   }, [hasVisibleNodes, isTouch, treeData, onNodeClick]);
 
   return (
-    <div className="graph-shell">
-      {hasVisibleNodes ? (
-        <svg ref={svgRef} id="graph-svg" />
-      ) : (
-        <div className="empty-state">
-          <span className="empty-state-icon">◎</span>
-          <span className="empty-state-msg">{emptyMessage}</span>
-        </div>
+    <>
+      <div className="graph-shell">
+        {hasVisibleNodes ? (
+          <svg ref={svgRef} id="graph-svg" />
+        ) : (
+          <div className="empty-state">
+            <span className="empty-state-icon">◎</span>
+            <span className="empty-state-msg">{emptyMessage}</span>
+          </div>
+        )}
+      </div>
+      {typeof document !== 'undefined' && createPortal(
+        <div ref={tooltipRef} className="graph-tooltip" />,
+        document.body
       )}
-      <div ref={tooltipRef} className="graph-tooltip" />
-    </div>
+    </>
   );
 });
 
