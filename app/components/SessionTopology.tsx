@@ -167,6 +167,9 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
   const tooltipRef = useRef<HTMLDivElement>(null);
   const resetRef = useRef<() => void>(() => {});
   const [isTouch, setIsTouch] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const treeData = useMemo(() => buildSessionTree(sessions, filter), [sessions, filter]);
   const hasVisibleNodes = useMemo(() => (treeData.children ?? []).some((node) => node._agentNode ? (node.children?.length ?? 0) > 0 : true), [treeData]);
@@ -222,7 +225,7 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
           </div>
         )}
       </div>
-      {typeof document !== 'undefined' && createPortal(
+      {mounted && createPortal(
         <div ref={tooltipRef} className="graph-tooltip" />,
         document.body
       )}
