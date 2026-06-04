@@ -62,8 +62,14 @@ function isSubagentSessionId(sessionId: string): boolean {
 }
 
 function subagentFallback(sessionId: string): string {
-  const suffix = sessionId.split(':').pop()?.replace(/[^a-z0-9]/gi, '').slice(0, 6) ?? '';
-  return suffix ? `Task ${suffix}` : 'Task';
+  // es. agent:ops:subagent:UUID → "Ops Agent"
+  // es. agent:ops:cron:UUID → "Ops Cron"
+  const parts = sessionId.split(':');
+  const agentName = parts[1] ? prettifyAgentName(parts[1]) : '';
+  const kind = parts[2] ?? 'subagent';
+  if (kind === 'cron') return agentName ? `${agentName} Cron` : 'Cron';
+  const suffix = parts[3]?.replace(/[^a-z0-9]/gi, '').slice(0, 6) ?? '';
+  return agentName ? `${agentName} · ${suffix}` : suffix ? `Task ${suffix}` : 'Task';
 }
 
 export function isSessionActive(session: Pick<Session, 'status'>): boolean {
