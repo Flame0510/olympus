@@ -12,7 +12,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   {
-    href: '/?period=7d',
+    href: '/',
     label: 'Dashboard',
     icon: (
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -20,6 +20,19 @@ const NAV: NavItem[] = [
         <rect x="9" y="1" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
         <rect x="1" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
         <rect x="9" y="9" width="6" height="6" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      </svg>
+    ),
+  },
+
+  {
+    href: '/lineage?period=7d',
+    label: 'Lineage',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="4" cy="4" r="2" stroke="currentColor" strokeWidth="1.3" />
+        <circle cx="12" cy="4" r="2" stroke="currentColor" strokeWidth="1.3" />
+        <circle cx="8" cy="12" r="2" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M5.7 5.2 7.1 10M10.3 5.2 8.9 10M6 4h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
       </svg>
     ),
   },
