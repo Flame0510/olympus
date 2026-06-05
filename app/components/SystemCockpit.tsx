@@ -6,6 +6,7 @@ import type { Costs, Session, SessionEvent } from '@/lib/types';
 import { isSessionActive } from '@/lib/patterns/sessionPresentation';
 import { SkeletonLines, SkeletonMetric } from './Skeleton';
 import { Metric, StatusCard, Surface, toneFromHealth } from './ui';
+import { apiFetch } from '@/lib/apiFetch';
 
 interface SystemCheck {
   id: string;
@@ -70,7 +71,7 @@ export default function SystemCockpit({ sessions, events, costs, loading = false
 
   useEffect(() => {
     const load = () => {
-      fetch('/api/system-health')
+      apiFetch('/api/system-health')
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then(setSystemHealth)
         .catch((error) => setSystemHealth({

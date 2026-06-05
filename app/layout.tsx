@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import Sidebar from './components/Sidebar';
+import OlympusChat from './components/OlympusChat';
 
 const jetBrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 const instrumentSerif = Instrument_Serif({
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app-shell">
           <Sidebar />
           <main className="app-shell__content">{children}</main>
+          <OlympusChat />
         </div>
       </body>
     </html>

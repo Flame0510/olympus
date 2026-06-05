@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { MemoryContextPayload } from '@/lib/memory-context';
 import { Pill, Metric, Surface, Page, PageHeader, toneFromHealth } from '../components/ui';
+import { apiFetch } from '@/lib/apiFetch';
 import { SkeletonLines } from '../components/Skeleton';
 
 function formatBytes(value: number | null): string {
@@ -25,7 +26,7 @@ export default function MemoryContextPageClient() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch('/api/memory-context', { cache: 'no-store', credentials: 'same-origin' });
+        const res = await apiFetch('/api/memory-context');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         setData((await res.json()) as MemoryContextPayload);
       } catch (err) {

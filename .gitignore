@@ -4,6 +4,8 @@ node_modules/
 .env.local
 *.db
 *.db-*
+*.bak
+*.tsbuildinfo
 *.db.bak*
 *.db-shm
 *.db-wal

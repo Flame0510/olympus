@@ -4,13 +4,33 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
+const STORAGE_KEY = 'olympus_pythia_chat';
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
+function loadMessages(): Message[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveMessages(messages: Message[]) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  } catch {
+    // storage full or unavailable — silently ignore
+  }
+}
+
 function renderContent(text: string) {
-  // Convert markdown links [label](/path) to <Link> components
   const parts = text.split(/(\[([^\]]+)\]\(([^)]+)\))/g);
   const result: React.ReactNode[] = [];
   let i = 0;
@@ -43,12 +63,17 @@ function renderContent(text: string) {
 export default function OlympusChat() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(loadMessages);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Persist to localStorage on every messages change
+  useEffect(() => {
+    saveMessages(messages);
+  }, [messages]);
 
   useEffect(() => {
     if (open) {
@@ -56,6 +81,12 @@ export default function OlympusChat() {
       inputRef.current?.focus();
     }
   }, [open, messages]);
+
+  const newSession = useCallback(() => {
+    setMessages([]);
+    localStorage.removeItem(STORAGE_KEY);
+    inputRef.current?.focus();
+  }, []);
 
   const send = useCallback(async () => {
     const text = input.trim();
@@ -150,9 +181,9 @@ export default function OlympusChat() {
       {/* Floating trigger button */}
       <button
         className="ochat__trigger"
-        aria-label="Olympus Assistant"
+        aria-label="Pythia — Assistente Olympus"
         onClick={() => setOpen((v) => !v)}
-        title="Olympus Assistant"
+        title="Pythia — Assistente Olympus"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -168,19 +199,33 @@ export default function OlympusChat() {
                 <ellipse cx="12" cy="12" rx="10" ry="6" />
                 <circle cx="12" cy="12" r="3" fill="var(--copper)" stroke="none" />
               </svg>
-              OLYMPUS ASSISTANT
+              PYTHIA 🔮
             </span>
-            <button className="ochat__close" onClick={() => setOpen(false)} aria-label="Close">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {messages.length > 0 && (
+                <button
+                  className="ochat__clear"
+                  onClick={newSession}
+                  title="Nuova sessione"
+                  aria-label="Nuova sessione"
+                >
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 8h12M8 2v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+              <button className="ochat__close" onClick={() => setOpen(false)} aria-label="Close">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="ochat__messages">
             {messages.length === 0 && (
               <p className="ochat__empty">
-                Ciao! Sono l'assistente di Olympus. Chiedimi qualcosa sulla pagina che stai guardando o su come navigare la dashboard.
+                Ciao! Sono <strong>Pythia</strong> 🔮, l'oracolo di Olympus. Chiedimi qualcosa sulla dashboard, sui dati o sulla pagina che stai guardando.
               </p>
             )}
             {messages.map((m, i) => (
@@ -201,7 +246,7 @@ export default function OlympusChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
-              placeholder="Scrivi un messaggio… (Enter per inviare)"
+              placeholder="Chiedi a Pythia… (Enter per inviare)"
               rows={1}
               disabled={streaming}
             />

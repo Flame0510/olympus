@@ -121,8 +121,10 @@ export function useDashboard({ initialCosts }: UseDashboardOptions = {}) {
     hasCostLoaded: false,
   });
 
+  const apiToken = process.env.NEXT_PUBLIC_OLYMPUS_TOKEN ?? 'olympus2026';
+
   useEffect(() => {
-    fetch('/api/costs')
+    fetch(`/api/costs?token=${encodeURIComponent(apiToken)}`)
       .then((r) => r.json())
       .then((costs: Partial<Costs>) => {
         if (typeof costs.today === 'number') dispatch({ type: 'UPDATE_COST_TODAY', today: costs.today });
@@ -140,7 +142,7 @@ export function useDashboard({ initialCosts }: UseDashboardOptions = {}) {
   const [availableAgents, setAvailableAgents] = useState<string[]>(['all']);
   useEffect(() => {
     const load = () =>
-      fetch('/api/agents')
+      fetch(`/api/agents?token=${encodeURIComponent(apiToken)}`)
         .then((r) => r.json())
         .then((ids: string[]) => {
           if (Array.isArray(ids)) setAvailableAgents(['all', ...ids]);
