@@ -26,6 +26,7 @@ export default function LineageGraphPage({ initialCosts }: LineageGraphPageProps
     visibleEvents,
     setFilter,
     selectSession,
+    hasCostLoaded,
   } = useDashboard({ initialCosts });
 
   const topologyRef = useRef<SessionTopologyHandle>(null);
@@ -46,7 +47,7 @@ export default function LineageGraphPage({ initialCosts }: LineageGraphPageProps
 
   return (
     <main className="shell">
-      <DashboardHeader costs={costs} />
+      <DashboardHeader costs={costs} loading={!hasCostLoaded} />
       <DashboardToolbar filter={filter} onChange={setFilter} agents={availableAgents} />
 
       {isMobile && (

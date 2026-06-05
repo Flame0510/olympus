@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Costs, Session, SessionEvent } from '@/lib/types';
 import { isSessionActive } from '@/lib/patterns/sessionPresentation';
+import { SkeletonLines, SkeletonMetric } from './Skeleton';
 
 interface SystemCheck {
   id: string;
@@ -37,6 +38,7 @@ interface SystemCockpitProps {
   sessions: Session[];
   events: SessionEvent[];
   costs: Costs;
+  loading?: boolean;
 }
 
 function fmtMoney(value?: number | null): string {
@@ -72,7 +74,7 @@ function findCheck(checks: SystemCheck[], id: string): SystemCheck | undefined {
   return checks.find((check) => check.id === id);
 }
 
-export default function SystemCockpit({ sessions, events, costs }: SystemCockpitProps) {
+export default function SystemCockpit({ sessions, events, costs, loading = false }: SystemCockpitProps) {
   const [systemHealth, setSystemHealth] = useState<SystemHealthPayload | null>(null);
 
   useEffect(() => {
@@ -100,6 +102,7 @@ export default function SystemCockpit({ sessions, events, costs }: SystemCockpit
     return { active, errors, latest, costlyModel };
   }, [sessions, events, costs.byModel]);
 
+  const systemLoading = loading || !systemHealth;
   const checks = systemHealth?.checks ?? [];
   const memoryCheck = findCheck(checks, 'memory.shared-context');
   const cronCheck = findCheck(checks, 'cron.jobs') ?? findCheck(checks, 'cron.api');
@@ -113,27 +116,29 @@ export default function SystemCockpit({ sessions, events, costs }: SystemCockpit
         <div style={cardStyle(healthColor(health))}>
           <div style={{ fontSize: 10, letterSpacing: '0.14em', color: 'var(--text-dim)', textTransform: 'uppercase' }}>Argus System Health</div>
           <div style={{ marginTop: 12, display: 'flex', alignItems: 'baseline', gap: 12 }}>
-            <span style={{ fontSize: 34, color: healthColor(health), textTransform: 'uppercase', fontWeight: 800 }}>{health}</span>
+            {systemLoading ? <SkeletonMetric width={120} /> : <span style={{ fontSize: 34, color: healthColor(health), textTransform: 'uppercase', fontWeight: 800 }}>{health}</span>}
             <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>ultimo evento {fmtAge(metrics.latest)}</span>
           </div>
           <div style={{ marginTop: 10, color: 'var(--text-dim)', fontSize: 11 }}>Monitor server-side da `/api/system-health`.</div>
         </div>
-        <Metric title="Sessioni attive" value={metrics.active} sub={`${sessions.length} totali`} />
-        <Metric title="Costo oggi" value={fmtMoney(costs.today)} sub={`top: ${metrics.costlyModel}`} accent="var(--copper)" />
-        <Metric title="Memory health" value={(memoryCheck?.health ?? 'warning').toUpperCase()} sub={String(memoryCheck?.value ?? 'n/d')} accent={healthColor(memoryCheck?.health ?? 'warning')} />
+        <Metric title="Sessioni attive" value={metrics.active} sub={`${sessions.length} totali`} loading={loading} />
+        <Metric title="Costo a consumo" value={String(findCheck(checks, 'cost.usageBasedToday')?.value ?? fmtMoney(0))} sub={findCheck(checks, 'cost.usageBasedToday')?.details ?? `DB estimate ${fmtMoney(costs.today)}`} accent="var(--copper)" loading={systemLoading} />
+        <Metric title="Memory health" value={(memoryCheck?.health ?? 'warning').toUpperCase()} sub={String(memoryCheck?.value ?? 'n/d')} accent={healthColor(memoryCheck?.health ?? 'warning')} loading={systemLoading} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
-          <StatusCard title="Runtime Olympus" health={runtimeCheck?.health ?? 'warning'} rows={[[runtimeCheck?.label ?? 'Sessioni totali', runtimeCheck?.value ?? sessions.length], ['Ultimo aggiornamento', fmtAge(metrics.latest)], ['Errori feed recente', metrics.errors]]} />
-          <StatusCard title="Cron / Watchdog" health={cronCheck?.health ?? 'warning'} rows={[[cronCheck?.label ?? 'Cron', cronCheck?.value ?? 'n/d'], ['Dettaglio', cronCheck?.details ?? 'n/d'], ['Sorgente', '/api/system-health']]} />
-          <StatusCard title="Shared Context" health={memoryCheck?.health ?? 'warning'} rows={[[memoryCheck?.label ?? 'Shared context', memoryCheck?.value ?? 'n/d'], ['Dettaglio', memoryCheck?.details ?? 'n/d'], ['Pagina', <Link key="memory" href="/memory" style={{ color: 'var(--copper)' }}>Apri memory →</Link>]]} />
-          <StatusCard title="Lineage" health={sessions.length ? 'ok' : 'warning'} rows={[[ 'Sessioni totali', sessions.length], ['Eventi live', events.length], ['Vista completa', <Link key="lineage" href="/lineage" style={{ color: 'var(--copper)' }}>Apri grafo →</Link>]]} />
+          <StatusCard loading={systemLoading} title="Runtime Olympus" health={runtimeCheck?.health ?? 'warning'} rows={[[runtimeCheck?.label ?? 'Sessioni totali', runtimeCheck?.value ?? sessions.length], ['Ultimo aggiornamento', fmtAge(metrics.latest)], ['Errori feed recente', metrics.errors]]} />
+          <StatusCard loading={systemLoading} title="Cron / Watchdog" health={cronCheck?.health ?? 'warning'} rows={[[cronCheck?.label ?? 'Cron', cronCheck?.value ?? 'n/d'], ['Dettaglio', cronCheck?.details ?? 'n/d'], ['Sorgente', '/api/system-health']]} />
+          <StatusCard loading={systemLoading} title="Shared Context" health={memoryCheck?.health ?? 'warning'} rows={[[memoryCheck?.label ?? 'Shared context', memoryCheck?.value ?? 'n/d'], ['Dettaglio', memoryCheck?.details ?? 'n/d'], ['Pagina', <Link key="memory" href="/memory" style={{ color: 'var(--copper)' }}>Apri memory →</Link>]]} />
+          <StatusCard loading={loading} title="Lineage" health={sessions.length ? 'ok' : 'warning'} rows={[[ 'Sessioni totali', sessions.length], ['Eventi live', events.length], ['Vista completa', <Link key="lineage" href="/lineage" style={{ color: 'var(--copper)' }}>Apri grafo →</Link>]]} />
         </div>
 
         <div style={cardStyle()}>
           <div style={{ fontSize: 10, letterSpacing: '0.14em', color: 'var(--copper)', textTransform: 'uppercase', marginBottom: 14 }}>Azioni consigliate</div>
-          {recommendations.length ? (
+          {systemLoading ? (
+            <SkeletonLines count={5} />
+          ) : recommendations.length ? (
             <ul style={{ display: 'flex', flexDirection: 'column', gap: 10, listStyle: 'none' }}>
               {recommendations.map((item) => (
                 <li key={item.id} style={{ borderLeft: `2px solid ${healthColor(item.severity === 'critical' ? 'error' : item.severity)}`, paddingLeft: 10, color: 'var(--text)', fontSize: 12, lineHeight: 1.5 }}>
@@ -161,17 +166,17 @@ export default function SystemCockpit({ sessions, events, costs }: SystemCockpit
   );
 }
 
-function Metric({ title, value, sub, accent }: { title: string; value: string | number; sub: string; accent?: string }) {
+function Metric({ title, value, sub, accent, loading = false }: { title: string; value: string | number; sub: string; accent?: string; loading?: boolean }) {
   return (
     <div style={cardStyle()}>
       <div style={{ fontSize: 10, letterSpacing: '0.12em', color: 'var(--text-dim)', textTransform: 'uppercase' }}>{title}</div>
-      <div style={{ marginTop: 14, fontSize: 26, fontWeight: 800, color: accent ?? 'var(--text)' }}>{value}</div>
-      <div style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: 11 }}>{sub}</div>
+      <div style={{ marginTop: 14, fontSize: 26, fontWeight: 800, color: accent ?? 'var(--text)' }}>{loading ? <SkeletonMetric /> : value}</div>
+      <div style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: 11 }}>{loading ? <SkeletonLines count={1} /> : sub}</div>
     </div>
   );
 }
 
-function StatusCard({ title, health, rows }: { title: string; health: 'ok' | 'warning' | 'error'; rows: [string, React.ReactNode][] }) {
+function StatusCard({ title, health, rows, loading = false }: { title: string; health: 'ok' | 'warning' | 'error'; rows: [string, React.ReactNode][]; loading?: boolean }) {
   return (
     <div style={cardStyle()}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
@@ -179,7 +184,7 @@ function StatusCard({ title, health, rows }: { title: string; health: 'ok' | 'wa
         <div style={{ fontSize: 10, color: healthColor(health), textTransform: 'uppercase', fontWeight: 700 }}>{health}</div>
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
-        {rows.map(([label, value]) => (
+        {loading ? <SkeletonLines count={3} /> : rows.map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11 }}>
             <span style={{ color: 'var(--text-dim)' }}>{label}</span>
             <span style={{ color: 'var(--text)', textAlign: 'right' }}>{value}</span>

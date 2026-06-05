@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { SkeletonLines } from '../components/Skeleton';
 
 const API_FETCH_OPTIONS: RequestInit = {
   cache: 'no-store',
@@ -291,6 +292,7 @@ export default function AgentsPage() {
   const [configSavingState, setConfigSavingState] = useState<SaveState>('idle');
   const [configError, setConfigError] = useState('');
   const [loadingFile, setLoadingFile] = useState(false);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [editableConfig, setEditableConfig] = useState<EditableAgentConfig | null>(null);
   const [editableAccounts, setEditableAccounts] = useState<EditableTelegramAccount[]>([]);
@@ -325,7 +327,10 @@ export default function AgentsPage() {
       setAgents(nextAgents);
       setAgentChannels(nextChannels);
       if (!selectedAgentId && nextAgents.length) setSelectedAgentId(nextAgents[0].agent_id);
-    } catch {}
+      setAgentsLoaded(true);
+    } catch {
+      setAgentsLoaded(true);
+    }
   }
 
   async function loadFile(path: string) {
@@ -509,7 +514,17 @@ export default function AgentsPage() {
       )}
       <div style={{ flex: 1, display: 'flex', minHeight: 0, flexDirection: isMobile ? 'column' : 'row' }}>
         <section style={{ width: isMobile ? '100%' : '32%', minWidth: isMobile ? 0 : 290, borderRight: isMobile ? 'none' : '1px solid var(--border)', display: isMobile && mobileStep !== 1 ? 'none' : 'block', overflow: 'auto' }}>
-          {agents.map((agent) => {
+          {!agentsLoaded && (
+            <div style={{ padding: 14, display: 'grid', gap: 14 }}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} style={{ border: '1px solid var(--border)', background: 'var(--bg2)', padding: 12 }}>
+                  <SkeletonLines count={3} />
+                </div>
+              ))}
+            </div>
+          )}
+          {agentsLoaded && agents.length === 0 && <div style={{ padding: 14, color: '#888', fontSize: 12 }}>Nessun agente rilevato</div>}
+          {agentsLoaded && agents.map((agent) => {
             const isActive = selectedAgentId === agent.agent_id;
             const hasWorking = agent.status === 'working';
             const model = agent.config_model ?? agent.sessions[0]?.model ?? 'unknown';
@@ -610,7 +625,7 @@ export default function AgentsPage() {
             <div style={{ fontSize: 10, color: '#888', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFilePath ? selectedFilePath.split('/').pop() : 'Select a file to edit'}</div>
             <button onClick={() => void saveFile()} disabled={!selectedFilePath || savingState === 'saving'} style={{ border: '1px solid var(--border)', background: savingState === 'saved' ? '#143018' : 'var(--bg3)', color: savingState === 'error' ? '#ef4444' : savingState === 'saved' ? '#22c55e' : 'var(--copper)', padding: '5px 10px', fontFamily: 'inherit', fontSize: 11, cursor: 'pointer' }}>{saveLabel}</button>
           </div>
-          <textarea value={editorContent} onChange={(e) => setEditorContent(e.target.value)} placeholder={loadingFile ? 'Loading...' : 'No file selected'} style={{ flex: 1, width: '100%', border: 'none', outline: 'none', resize: 'none', background: '#0A0A0B', color: '#E8E8E8', padding: isMobile ? 10 : 12, fontSize: isMobile ? 14 : 12, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.45 }} />
+          <textarea value={editorContent} onChange={(e) => setEditorContent(e.target.value)} placeholder={loadingFile ? 'Caricamento file…' : 'No file selected'} style={{ flex: 1, width: '100%', border: 'none', outline: 'none', resize: 'none', background: '#0A0A0B', color: '#E8E8E8', padding: isMobile ? 10 : 12, fontSize: isMobile ? 14 : 12, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.45 }} />
         </section>
       </div>
     </div>

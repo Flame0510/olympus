@@ -19,6 +19,8 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
     costs,
     selectedSessionId,
     selectSession,
+    hasSessionsLoaded,
+    hasCostLoaded,
   } = useDashboard({ initialCosts });
 
   const [isMobile, setIsMobile] = useState(false);
@@ -33,7 +35,7 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
 
   return (
     <main className="shell">
-      <DashboardHeader costs={costs} />
+      <DashboardHeader costs={costs} loading={!hasCostLoaded} />
       {isMobile && (
         <div style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', justifyContent: 'flex-end' }}>
           <button
@@ -60,7 +62,7 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
       )}
 
       <section className="layout layout--cockpit">
-        <SystemCockpit sessions={sessions} events={events} costs={costs} />
+        <SystemCockpit sessions={sessions} events={events} costs={costs} loading={!hasSessionsLoaded} />
       </section>
 
       <SessionDrawer

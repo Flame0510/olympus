@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import type { Costs } from '@/lib/types';
 import { formatUsd } from '@/lib/utils/format';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
+import { Skeleton } from './Skeleton';
 
 interface DashboardHeaderProps {
   costs: Costs;
+  loading?: boolean;
 }
 
 const CameraIcon = () => (
@@ -16,7 +18,7 @@ const CameraIcon = () => (
   </svg>
 );
 
-export default function DashboardHeader({ costs }: DashboardHeaderProps) {
+export default function DashboardHeader({ costs, loading: dataLoading = false }: DashboardHeaderProps) {
   const [clock, setClock] = useState('');
   const { loading, takeScreenshot } = useScreenshot();
 
@@ -43,11 +45,11 @@ export default function DashboardHeader({ costs }: DashboardHeaderProps) {
         </div>
         <div>
           <span className="meta-label">TODAY COST</span>
-          <span className="meta-value cost">{formatUsd(costs.today)}</span>
+          <span className="meta-value cost">{dataLoading ? <Skeleton className="skeleton--text" style={{ width: 58 }} /> : formatUsd(costs.today)}</span>
         </div>
         <div>
           <span className="meta-label">ALL TIME</span>
-          <span className="meta-value cost">{formatUsd(costs.allTime)}</span>
+          <span className="meta-value cost">{dataLoading ? <Skeleton className="skeleton--text" style={{ width: 72 }} /> : formatUsd(costs.allTime)}</span>
         </div>
         <button
           type="button"

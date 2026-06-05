@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { execSync } from 'child_process';
+import fs from 'fs';
 import { requireAuth } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
@@ -8,9 +8,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const denied = requireAuth(request);
   if (denied) return denied;
   try {
-    const stdout = execSync('openclaw cron list --json', { timeout: 5000 }).toString();
-    const parsed = JSON.parse(stdout.trim()) as { jobs?: unknown[] };
-    return NextResponse.json(parsed.jobs ?? []);
+    const cronStore = process.env.OPENCLAW_CRON_STORE ?? '/data/.openclaw/cron/jobs.json';
+    if (!fs.existsSync(cronStore)) return NextResponse.json([]);
+    const parsed = JSON.parse(fs.readFileSync(cronStore, 'utf8')) as { jobs?: unknown[] } | unknown[];
+    return NextResponse.json(Array.isArray(parsed) ? parsed : parsed.jobs ?? []);
   } catch {
     return NextResponse.json([], { status: 200 });
   }

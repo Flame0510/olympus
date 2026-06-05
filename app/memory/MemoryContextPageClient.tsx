@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { MemoryContextPayload, StrategyHealth } from '@/lib/memory-context';
+import { SkeletonLines, SkeletonMetric } from '../components/Skeleton';
 
 function cardTone(health: StrategyHealth): { border: string; text: string; bg: string } {
   if (health === 'ok') return { border: '#255b3f', text: '#5ee9a0', bg: 'rgba(34, 197, 94, 0.08)' };
@@ -74,7 +75,21 @@ export default function MemoryContextPageClient() {
           {data?.strategy && pill(`health: ${data.strategy.health}`, data.strategy.health)}
         </header>
 
-        {loading && <div style={{ color: '#8a8a92', fontSize: 13 }}>Loading memory context…</div>}
+        {loading && (
+          <>
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <article key={index} style={{ border: '1px solid var(--border)', background: 'var(--bg2)', padding: 16 }}>
+                  <SkeletonLines count={1} />
+                  <div style={{ marginTop: 10 }}><SkeletonMetric /></div>
+                </article>
+              ))}
+            </section>
+            <section style={{ border: '1px solid var(--border)', background: 'var(--bg2)', padding: 16 }}>
+              <SkeletonLines count={8} />
+            </section>
+          </>
+        )}
         {error && <div style={{ color: '#fca5a5', fontSize: 13 }}>{error}</div>}
 
         {data && (

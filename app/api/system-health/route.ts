@@ -1,8 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { execSync } from 'child_process';
+import fs from 'fs';
 import { requireBrowserAuth } from '@/lib/auth';
 import { openDb } from '@/lib/db';
 import { getMemoryContextSnapshot } from '@/lib/memory-context';
+import { summarizeBilling } from '@/lib/billing';
+import type { ModelCost } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,21 +120,43 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-    const todayCost = (db.prepare('SELECT COALESCE(SUM(cost_usd), 0) AS total FROM sessions WHERE started_at >= ?').get(Math.floor(startOfDay.getTime() / 1000)) as { total: number }).total;
+    const todayModels = db.prepare(
+      `SELECT model,
+        COALESCE(SUM(cost_usd), 0) AS cost_usd,
+        COALESCE(SUM(tokens_in), 0) AS tokens_in,
+        COALESCE(SUM(tokens_out), 0) AS tokens_out,
+        COUNT(*) AS sessions
+       FROM sessions WHERE started_at >= ?
+       GROUP BY model ORDER BY cost_usd DESC`,
+    ).all(Math.floor(startOfDay.getTime() / 1000)) as ModelCost[];
+    const billing = summarizeBilling(todayModels);
     checks.push({
-      id: 'cost.today',
-      label: 'Costo oggi',
-      health: todayCost > 10 ? 'warning' : 'ok',
-      value: `$${todayCost.toFixed(2)}`,
+      id: 'cost.usageBasedToday',
+      label: 'Costo a consumo oggi',
+      health: billing.usageBasedCost > 10 ? 'warning' : 'ok',
+      value: `$${billing.usageBasedCost.toFixed(2)}`,
+      details: `DB estimate $${billing.dbEstimatedCost.toFixed(2)}; fixed ${billing.buckets.fixed.sessions} sessioni; credits ${billing.buckets.credits.sessions} sessioni`,
       source: 'cost',
     });
-    if (todayCost > 10) {
+    if (billing.usageBasedCost > 10) {
       recommendations.push({
-        id: 'cost.review-models',
+        id: 'cost.review-usage-based',
         severity: 'warning',
         source: 'cost',
-        title: 'Costo giornaliero alto',
-        details: `Costo stimato oggi: $${todayCost.toFixed(2)}. Verificare provider/modelli attivi.`,
+        title: 'Costo a consumo alto',
+        details: `Provider usage-based oggi: $${billing.usageBasedCost.toFixed(2)}. Include OpenRouter e altri provider pay-per-use, non i piani fissi.`,
+        actionHref: '/providers',
+        dismissible: true,
+        createdAt,
+      });
+    }
+    if (billing.unknownModels.length > 0 && billing.buckets.unknown.cost_usd > 1) {
+      recommendations.push({
+        id: 'cost.classify-unknown-models',
+        severity: 'warning',
+        source: 'cost',
+        title: 'Modelli non classificati nel billing',
+        details: `${billing.unknownModels.length} modelli non classificati hanno DB estimate $${billing.buckets.unknown.cost_usd.toFixed(2)}.`,
         actionHref: '/providers',
         dismissible: true,
         createdAt,
@@ -171,17 +195,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const stdout = execSync('openclaw cron list --json', { timeout: 5000 }).toString();
-    const parsed = JSON.parse(stdout.trim()) as { jobs?: { enabled?: boolean }[] } | { id?: string; enabled?: boolean }[];
+    const cronStore = process.env.OPENCLAW_CRON_STORE ?? '/data/.openclaw/cron/jobs.json';
+    const parsed = fs.existsSync(cronStore)
+      ? JSON.parse(fs.readFileSync(cronStore, 'utf8')) as { jobs?: { enabled?: boolean }[] } | { id?: string; enabled?: boolean }[]
+      : [];
     const jobs = Array.isArray(parsed) ? parsed : parsed.jobs ?? [];
     const enabled = jobs.filter((job) => job.enabled !== false).length;
     checks.push({ id: 'cron.jobs', label: 'Cron jobs', health: enabled > 0 ? 'ok' : 'warning', value: enabled, details: `${jobs.length} totali`, source: 'cron' });
     if (enabled === 0) {
-      recommendations.push({ id: 'cron.enable-watchdog', severity: 'warning', source: 'cron', title: 'Nessun cron abilitato rilevato', details: 'Verificare watchdog e automazioni periodiche.', actionHref: '/crons', dismissible: false, createdAt });
+      recommendations.push({ id: 'cron.enable-watchdog', severity: 'warning', source: 'cron', title: 'Nessun cron abilitato rilevato', details: 'La lettura cron funziona: lo store locale non contiene job abilitati.', actionHref: '/crons', dismissible: false, createdAt });
     }
   } catch (error) {
-    checks.push({ id: 'cron.api', label: 'Cron API', health: 'warning', value: 'warning', details: (error as Error).message, source: 'cron' });
-    recommendations.push({ id: 'cron.api-unavailable', severity: 'warning', source: 'cron', title: 'Cron non verificabile', details: 'La lista cron non è leggibile da Olympus in questo momento.', actionHref: '/crons', dismissible: false, createdAt });
+    checks.push({ id: 'cron.store', label: 'Cron store', health: 'warning', value: 'warning', details: (error as Error).message, source: 'cron' });
+    recommendations.push({ id: 'cron.store-unavailable', severity: 'warning', source: 'cron', title: 'Cron store non leggibile', details: 'Olympus non riesce a leggere lo store locale dei cron.', actionHref: '/crons', dismissible: false, createdAt });
   }
 
   const health = topHealth(checks.map((check) => check.health));

@@ -61,6 +61,8 @@ interface DashboardState {
   costs: Costs;
   filter: FilterConfig;
   selectedSessionId: string | null;
+  hasSessionsLoaded: boolean;
+  hasCostLoaded: boolean;
 }
 
 type Action =
@@ -73,14 +75,14 @@ type Action =
 function reducer(state: DashboardState, action: Action): DashboardState {
   switch (action.type) {
     case 'SET_SESSIONS':
-      return { ...state, sessions: action.sessions };
+      return { ...state, sessions: action.sessions, hasSessionsLoaded: true };
     case 'PREPEND_EVENTS':
       return {
         ...state,
         events: [...action.events, ...state.events].slice(0, 50),
       };
     case 'UPDATE_COST_TODAY':
-      return { ...state, costs: { ...state.costs, today: action.today } };
+      return { ...state, costs: { ...state.costs, today: action.today }, hasCostLoaded: true };
     case 'SET_FILTER':
       return { ...state, filter: { ...state.filter, ...action.patch } };
     case 'SELECT_SESSION':
@@ -115,9 +117,18 @@ export function useDashboard({ initialCosts }: UseDashboardOptions = {}) {
     costs: { today: 0, allTime: 0, byModel: [], ...initialCosts },
     filter: initialFilter,
     selectedSessionId: null,
+    hasSessionsLoaded: false,
+    hasCostLoaded: false,
   });
 
   useEffect(() => {
+    fetch('/api/costs')
+      .then((r) => r.json())
+      .then((costs: Partial<Costs>) => {
+        if (typeof costs.today === 'number') dispatch({ type: 'UPDATE_COST_TODAY', today: costs.today });
+      })
+      .catch(() => {});
+
     const unsubscribe = OlympusEventBus.subscribe({
       onSessions: (sessions) => dispatch({ type: 'SET_SESSIONS', sessions }),
       onEvents: (events) => dispatch({ type: 'PREPEND_EVENTS', events }),
@@ -195,5 +206,7 @@ export function useDashboard({ initialCosts }: UseDashboardOptions = {}) {
     visibleEvents,
     setFilter,
     selectSession,
+    hasSessionsLoaded: state.hasSessionsLoaded,
+    hasCostLoaded: state.hasCostLoaded,
   };
 }
