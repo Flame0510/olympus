@@ -3,17 +3,24 @@
 import { useEffect, useState } from 'react';
 import { Pill } from '../components/ui';
 import type { Tone } from '../components/ui';
+import { apiFetch } from '@/lib/apiFetch';
 
+
+interface CronSchedule { kind?: string; expr?: string; tz?: string; [k: string]: unknown }
+interface CronPayload { kind?: string; message?: string; model?: string; [k: string]: unknown }
+interface CronState { lastStatus?: string; nextRunAtMs?: number | null; lastRunAtMs?: number | null; [k: string]: unknown }
 
 interface CronJob {
   id?: string;
   name?: string;
-  schedule?: string;
-  agent?: string;
-  prompt?: string;
+  description?: string;
+  agentId?: string;
+  schedule?: CronSchedule | string;
+  scheduleExpr?: string;
+  payload?: CronPayload;
+  state?: CronState;
   enabled?: boolean;
-  lastRun?: string | number;
-  nextRun?: string | number;
+  createdAtMs?: number;
   [key: string]: unknown;
 }
 
@@ -57,16 +64,38 @@ export default function CronsPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [sessions, setSessions] = useState<CronSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [tab, setTab] = useState<'jobs' | 'runs'>('jobs');
+
+  async function toggleJob(job: CronJob) {
+    const id = job.id;
+    if (!id) return;
+    setToggling(id);
+    try {
+      const res = await apiFetch(`/api/crons/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !(job.enabled !== false) }),
+      });
+      if (res.ok) {
+        const updated = await res.json() as CronJob;
+        setJobs((prev) => prev.map((j) => j.id === id ? { ...j, ...updated } : j));
+      }
+    } catch { /* keep UI alive */ }
+    finally { setToggling(null); }
+  }
 
   async function load() {
     try {
       const [jobsRes, sessRes] = await Promise.all([
-        fetch('/api/crons', { cache: 'no-store' }),
-        fetch('/api/sessions?filter=cron&limit=50', { cache: 'no-store' }),
+        apiFetch('/api/crons'),
+        apiFetch('/api/sessions?filter=cron&limit=50'),
       ]);
-      if (jobsRes.ok) setJobs((await jobsRes.json()) as CronJob[]);
+      if (jobsRes.ok) {
+        const data = await jobsRes.json() as CronJob[] | { jobs: CronJob[] };
+        setJobs(Array.isArray(data) ? data : (data.jobs ?? []));
+      }
       if (sessRes.ok) {
         const data = await sessRes.json();
         const all = (Array.isArray(data) ? data : data.sessions ?? []) as CronSession[];
@@ -121,46 +150,71 @@ export default function CronsPage() {
             {jobs.length === 0 && !loading && (
               <div style={{ padding: '20px 12px', fontSize: 11, color: '#555' }}>No scheduled jobs found</div>
             )}
-            {jobs.map((job, i) => (
-              <div key={job.id ?? i} style={{
-                padding: '10px 12px', borderBottom: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <span style={{ color: 'var(--copper)', fontSize: 12 }}>{job.name ?? job.id ?? `job-${i}`}</span>
-                  <Pill tone={job.enabled !== false ? 'success' : 'neutral'}>
-                    {job.enabled !== false ? 'ENABLED' : 'DISABLED'}
-                  </Pill>
-                </div>
-                {job.schedule && (
-                  <div style={{ fontSize: 11, color: '#60a5fa', fontFamily: 'monospace', marginBottom: 4 }}>
-                    {job.schedule}
-                  </div>
-                )}
-                {job.agent && <div style={{ fontSize: 10, color: '#888' }}>agent: {job.agent}</div>}
-                {job.prompt && (
-                  <div style={{
-                    fontSize: 10, color: '#555', marginTop: 4,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {String(job.prompt).slice(0, 80)}
-                  </div>
-                )}
-                {(job.lastRun || job.nextRun) && (
-                  <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 10 }}>
-                    {job.lastRun && <span style={{ color: '#555' }}>last: <span style={{ color: '#888' }}>{String(job.lastRun)}</span></span>}
-                    {job.nextRun && <span style={{ color: '#555' }}>next: <span style={{ color: '#888' }}>{String(job.nextRun)}</span></span>}
-                  </div>
-                )}
-                {/* Show raw keys not handled above */}
-                {Object.entries(job)
-                  .filter(([k]) => !['id','name','schedule','agent','prompt','enabled','lastRun','nextRun'].includes(k))
-                  .map(([k, v]) => (
-                    <div key={k} style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
-                      {k}: <span style={{ color: '#888' }}>{String(v)}</span>
+            {jobs.map((job, i) => {
+              const expr = job.scheduleExpr
+                ?? (typeof job.schedule === 'string' ? job.schedule : (job.schedule as CronSchedule | undefined)?.expr ?? '');
+              const tz = typeof job.schedule === 'object' && job.schedule !== null
+                ? (job.schedule as CronSchedule).tz : undefined;
+              const model = job.payload?.model;
+              const prompt = job.payload?.message ?? (job.payload as { text?: string } | undefined)?.text;
+              const nextRun = job.state?.nextRunAtMs;
+              const lastRun = job.state?.lastRunAtMs;
+              const lastStatus = job.state?.lastStatus;
+              return (
+                <div key={job.id ?? i} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ color: 'var(--copper)', fontSize: 12 }}>{job.name ?? job.id ?? `job-${i}`}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Pill tone={job.enabled !== false ? 'success' : 'neutral'}>
+                        {job.enabled !== false ? 'ENABLED' : 'DISABLED'}
+                      </Pill>
+                      {job.id && (
+                        <button
+                          onClick={() => void toggleJob(job)}
+                          disabled={toggling === job.id}
+                          style={{
+                            fontSize: 9, padding: '2px 6px', border: '1px solid var(--border)',
+                            background: 'transparent', color: job.enabled !== false ? '#ef4444' : '#22c55e',
+                            cursor: toggling === job.id ? 'not-allowed' : 'pointer',
+                            opacity: toggling === job.id ? 0.5 : 1,
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          {toggling === job.id ? '...' : job.enabled !== false ? 'DISABLE' : 'ENABLE'}
+                        </button>
+                      )}
                     </div>
-                  ))}
-              </div>
-            ))}
+                  </div>
+                  {expr && (
+                    <div style={{ fontSize: 11, color: '#60a5fa', fontFamily: 'monospace', marginBottom: 4 }}>
+                      {expr}{tz ? ` (${tz})` : ''}
+                    </div>
+                  )}
+                  {job.description && (
+                    <div style={{ fontSize: 10, color: '#888', marginBottom: 4 }}>{String(job.description)}</div>
+                  )}
+                  {job.agentId && <div style={{ fontSize: 10, color: '#666' }}>agent: {String(job.agentId)}</div>}
+                  {model && <div style={{ fontSize: 10, color: '#666' }}>model: {model}</div>}
+                  {prompt && (
+                    <div style={{ fontSize: 10, color: '#555', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {String(prompt).slice(0, 100)}
+                    </div>
+                  )}
+                  {job.createdAtMs != null && (
+                    <div style={{ fontSize: 10, color: '#555', marginTop: 2 }}>
+                      created: <span style={{ color: '#888' }}>{formatTs(job.createdAtMs as number)}</span>
+                    </div>
+                  )}
+                  {(lastRun != null || nextRun != null || lastStatus) && (
+                    <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {lastStatus && <Pill tone={lastStatus === 'ok' ? 'success' : lastStatus === 'error' ? 'danger' : 'neutral'}>{lastStatus.toUpperCase()}</Pill>}
+                      {lastRun != null && <span style={{ color: '#555' }}>last: <span style={{ color: '#888' }}>{formatTs(lastRun)}</span></span>}
+                      {nextRun != null && <span style={{ color: '#555' }}>next: <span style={{ color: '#888' }}>{formatTs(nextRun)}</span></span>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 
