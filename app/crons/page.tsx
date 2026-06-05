@@ -164,23 +164,38 @@ export default function CronsPage() {
                 <div key={job.id ?? i} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span style={{ color: 'var(--copper)', fontSize: 12 }}>{job.name ?? job.id ?? `job-${i}`}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Pill tone={job.enabled !== false ? 'success' : 'neutral'}>
-                        {job.enabled !== false ? 'ENABLED' : 'DISABLED'}
-                      </Pill>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       {job.id && (
                         <button
                           onClick={() => void toggleJob(job)}
                           disabled={toggling === job.id}
+                          title={job.enabled !== false ? 'Disable job' : 'Enable job'}
                           style={{
-                            fontSize: 9, padding: '2px 6px', border: '1px solid var(--border)',
-                            background: 'transparent', color: job.enabled !== false ? '#ef4444' : '#22c55e',
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '3px 8px 3px 5px',
+                            border: `1px solid ${job.enabled !== false ? '#255b3f' : 'var(--border)'}`,
+                            borderRadius: 20,
+                            background: job.enabled !== false ? 'rgba(34,197,94,0.08)' : 'var(--bg2)',
                             cursor: toggling === job.id ? 'not-allowed' : 'pointer',
                             opacity: toggling === job.id ? 0.5 : 1,
-                            letterSpacing: '0.05em',
+                            transition: 'all 0.15s',
+                            outline: 'none',
                           }}
                         >
-                          {toggling === job.id ? '...' : job.enabled !== false ? 'DISABLE' : 'ENABLE'}
+                          {/* track */}
+                          <span style={{
+                            display: 'inline-flex', width: 26, height: 14, borderRadius: 7,
+                            background: toggling === job.id ? '#555' : job.enabled !== false ? 'var(--green)' : '#3a3a3a',
+                            alignItems: 'center', padding: '0 2px',
+                            justifyContent: job.enabled !== false ? 'flex-end' : 'flex-start',
+                            transition: 'background 0.15s',
+                            flexShrink: 0,
+                          }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#fff', display: 'inline-block' }} />
+                          </span>
+                          <span style={{ fontSize: 9, letterSpacing: '0.07em', color: job.enabled !== false ? 'var(--green)' : '#666' }}>
+                            {toggling === job.id ? '···' : job.enabled !== false ? 'ON' : 'OFF'}
+                          </span>
                         </button>
                       )}
                     </div>
