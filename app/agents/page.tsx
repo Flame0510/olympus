@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { SkeletonLines } from '../components/Skeleton';
 import { Pill, Surface } from '../components/ui';
 import { apiFetch } from '@/lib/apiFetch';
@@ -273,6 +273,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentChannels, setAgentChannels] = useState<Record<string, AgentChannelSummary>>({});
   const [selectedAgentId, setSelectedAgentId] = useState('');
+  const selectedAgentIdRef = useRef('');
   const [selectedFilePath, setSelectedFilePath] = useState('');
   const [editorContent, setEditorContent] = useState('');
   const [mobileStep, setMobileStep] = useState(1);
@@ -315,7 +316,10 @@ export default function AgentsPage() {
       const nextChannels = Array.isArray(channelData) ? Object.fromEntries(channelData.map((item) => [item.agentId, item])) : {};
       setAgents(nextAgents);
       setAgentChannels(nextChannels);
-      if (!selectedAgentId && nextAgents.length) setSelectedAgentId(nextAgents[0].agent_id);
+      if (!selectedAgentIdRef.current && nextAgents.length) {
+        setSelectedAgentId(nextAgents[0].agent_id);
+        selectedAgentIdRef.current = nextAgents[0].agent_id;
+      }
       setAgentsLoaded(true);
     } catch {
       setAgentsLoaded(true);
@@ -439,6 +443,7 @@ export default function AgentsPage() {
       setAgentChannels(nextChannels);
       const nextSelectedAgentId = editableConfig.id;
       setSelectedAgentId(nextSelectedAgentId);
+      selectedAgentIdRef.current = nextSelectedAgentId;
       setEditableConfig(cloneAgentConfig(nextChannels[nextSelectedAgentId]?.config));
       setEditableAccounts(cloneTelegramAccounts(nextChannels[nextSelectedAgentId]?.telegram.accounts ?? []));
       setEditableBindings(cloneTelegramBindings(nextChannels[nextSelectedAgentId]?.telegram.bindings ?? [], nextSelectedAgentId));
@@ -521,7 +526,7 @@ export default function AgentsPage() {
             const telegramBindings = channelSummary?.telegram.bindings ?? [];
             const primaryAccount = telegramAccounts[0];
             return (
-              <button key={agent.agent_id} onClick={() => { setSelectedAgentId(agent.agent_id); setSelectedFilePath(''); setEditorContent(''); setMobileStep(2); }} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
+              <button key={agent.agent_id} onClick={() => { setSelectedAgentId(agent.agent_id); selectedAgentIdRef.current = agent.agent_id; setSelectedFilePath(''); setEditorContent(''); setMobileStep(2); }} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: hasWorking ? '#22c55e' : '#888', display: 'inline-block' }} /><span style={{ color: isActive ? 'var(--copper)' : 'var(--text)', fontSize: 12 }}>{agent.agent_id}</span></div>
                   <span style={{ fontSize: 10, color: '#555' }}>{agent.sessions.length} sess</span>

@@ -84,6 +84,16 @@ function extractAgentId(sessionId: string): string {
   return (parts.length >= 2 && parts[1]) ? parts[1] : parts[0] ?? 'unknown';
 }
 
+function formatModel(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const model = value as { primary?: unknown; model?: unknown; provider?: unknown };
+    if (typeof model.primary === 'string') return model.primary;
+    if (typeof model.model === 'string') return model.provider ? `${String(model.provider)}/${model.model}` : model.model;
+  }
+  return 'unknown';
+}
+
 function readConfiguredAgents(): ConfiguredAgent[] {
   try {
     const raw = fs.readFileSync('/data/.openclaw/openclaw.json', 'utf8');
@@ -165,7 +175,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const sessions = (grouped.get(agent_id) ?? []).slice(0, 5);
       const workspace_path = mapWorkspace(agent_id);
       const files = listWorkspaceFiles(workspace_path);
-      const config_model = cfg.model ?? cfg.defaultModel ?? cfg.default_model ?? 'unknown';
+      const config_model = formatModel(cfg.model ?? cfg.defaultModel ?? cfg.default_model);
       const latestStatus = sessions[0]?.status;
       const status = latestStatus === 'working' ? 'working' : latestStatus ? 'idle' : 'inactive';
       return { agent_id, label: cfg.label ?? agent_id, config_model, workspace_path, files, sessions, status, config: cfg };

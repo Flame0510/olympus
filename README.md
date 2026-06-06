@@ -6,10 +6,12 @@ Real-time monitoring dashboard for AI agent systems.
 
 ## Features
 
-- **Live agent graph** — D3.js force-directed graph showing parent→child session hierarchy in real time
+- **Live agent graph** — force-directed graph showing parent→child session hierarchy in real time
 - **Cost tracker** — per session / model / day breakdown with optional manual override
 - **Real-time event feed** — spawn, complete, error events with label and timestamp
 - **Period filters** — today / 7d / 30d / all time
+- **System health** — CPU, RAM, disk, daemon status, cron checks
+- **PYTHIA** — embedded AI assistant for natural-language queries about sessions and costs
 - **Mobile-optimized layout** — dedicated mobile tab interface with bottom navigation
 
 ## Requirements
@@ -21,44 +23,57 @@ Real-time monitoring dashboard for AI agent systems.
 ## Quick Start
 
 ```bash
-git clone https://github.com/Flame0510/olympus-dashboard /data/olympus
-cd /data/olympus
-npm install
+git clone https://github.com/Flame0510/olympus-dashboard \
+  /data/.openclaw/workspace-ops/olympus-next-ts
+cd /data/.openclaw/workspace-ops/olympus-next-ts
+npm install && npm run build
 bash start-daemon.sh
 ```
 
-Dashboard available at: `http://localhost:3700`
+Dashboard available at: `http://localhost:3720`
 
 ## Configuration
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `3700` | HTTP port. **Always set explicitly** if running in OpenClaw (internal `$PORT` differs) |
+| `PORT` | `3720` | HTTP port. **Always set explicitly** inside OpenClaw containers |
 | `OLYMPUS_TOKEN` | `olympus2026` | Bearer token for all `/api/*` routes |
-| `DB_PATH` | `./events.db` | SQLite database path (hardcoded in daemon.js) |
-
-## Integration
-
-See [CONNECT.md](./CONNECT.md) for AI-assisted automated setup — designed to be executed by an AI agent with zero human intervention.
+| `OLYMPUS_DB` | `./events.db` | SQLite database path |
+| `GROQ_API_KEY` | — | API key for PYTHIA assistant (Groq default) |
+| `ASSISTANT_MODEL` | `llama-3.1-8b-instant` | LLM model for PYTHIA |
 
 ## Architecture
 
 ```
-openclaw sessions --json (every 30s)
-         ↓
-     daemon.js → events.db (SQLite WAL)
-                     ↓
-               server.js (Express, port 3700)
-                     ↓
-          dashboard/index.html (D3.js, HTTP polling 10s)
+OpenClaw runtime
+       ↓  (openclaw sessions --json, every 15–30s)
+   daemon.js
+       ↓  (INSERT/UPDATE, WAL)
+  events.db (SQLite)
+       ↓
+  Next.js /api/* routes  +  /api/stream (SSE)
+       ↓
+   React UI (port 3720)
 ```
-
-For detailed internals, see [docs/architecture.md](./docs/architecture.md).
 
 ## Documentation
 
+### Developer docs (`docs/dev/`)
+- [docs/dev/architecture.md](./docs/dev/architecture.md) — stack, data flow, DB schema
+- [docs/dev/api-reference.md](./docs/dev/api-reference.md) — all 23 `/api/*` endpoints
+- [docs/dev/daemon.md](./docs/dev/daemon.md) — polling logic, cost estimation, model pricing
+- [docs/dev/database.md](./docs/dev/database.md) — SQLite schema, WAL, queries, backup
+- [docs/dev/deployment.md](./docs/dev/deployment.md) — container + VPS setup guide
+
+### RAG / PYTHIA knowledge base (`docs/rag/`)
+- [docs/rag/olympus-overview.md](./docs/rag/olympus-overview.md) — what Olympus is and how it works
+- [docs/rag/glossary.md](./docs/rag/glossary.md) — all key terms defined
+- [docs/rag/what-i-can-answer.md](./docs/rag/what-i-can-answer.md) — PYTHIA capability reference
+- [docs/rag/data-freshness.md](./docs/rag/data-freshness.md) — update frequencies and data latency
+
+### Frontend & setup
+- [docs/frontend-architecture.md](./docs/frontend-architecture.md) — component layering and design system
 - [CONNECT.md](./CONNECT.md) — AI agent integration guide
-- [docs/architecture.md](./docs/architecture.md) — internal architecture and DB schema
 - [docs/vps-setup.md](./docs/vps-setup.md) — bare VPS setup with systemd
 - [docs/container-setup.md](./docs/container-setup.md) — OpenClaw container specifics
 

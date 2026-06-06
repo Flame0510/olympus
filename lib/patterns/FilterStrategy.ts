@@ -1,7 +1,8 @@
 // Strategy pattern: interchangeable session filter algorithms
 import type { Session, FilterConfig, Period, PERIOD_MS } from '../types';
-import { ACTIVE_STATUSES, PERIOD_MS as PERIOD_MS_MAP } from '../types';
+import { PERIOD_MS as PERIOD_MS_MAP } from '../types';
 import { extractAgentId, isCronSession } from './SessionFactory';
+import { isSessionActive } from './sessionPresentation';
 
 /** Base interface — every filter strategy must implement this. */
 export interface IFilterStrategy {
@@ -21,7 +22,7 @@ export class AgentFilterStrategy implements IFilterStrategy {
 
 export class ActiveOnlyFilterStrategy implements IFilterStrategy {
   filter(sessions: Session[]): Session[] {
-    return sessions.filter((s) => ACTIVE_STATUSES.has(s.status));
+    return sessions.filter(isSessionActive);
   }
 }
 

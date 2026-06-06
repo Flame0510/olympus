@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import fs from 'fs';
 import { requireBrowserAuth } from '@/lib/auth';
 import { openDb } from '@/lib/db';
 import { getMemoryContextSnapshot } from '@/lib/memory-context';
 import { summarizeBilling } from '@/lib/billing';
+import { listOpenClawCronJobs } from '@/lib/openclaw-cron';
 import type { ModelCost } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -195,19 +195,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const cronStore = process.env.OPENCLAW_CRON_STORE ?? '/data/.openclaw/cron/jobs.json';
-    const parsed = fs.existsSync(cronStore)
-      ? JSON.parse(fs.readFileSync(cronStore, 'utf8')) as { jobs?: { enabled?: boolean }[] } | { id?: string; enabled?: boolean }[]
-      : [];
-    const jobs = Array.isArray(parsed) ? parsed : parsed.jobs ?? [];
-    const enabled = jobs.filter((job) => job.enabled !== false).length;
-    checks.push({ id: 'cron.jobs', label: 'Cron jobs', health: enabled > 0 ? 'ok' : 'warning', value: enabled, details: `${jobs.length} totali`, source: 'cron' });
-    if (enabled === 0) {
-      recommendations.push({ id: 'cron.enable-watchdog', severity: 'warning', source: 'cron', title: 'Nessun cron abilitato rilevato', details: 'La lettura cron funziona: lo store locale non contiene job abilitati.', actionHref: '/crons', dismissible: false, createdAt });
+    const cron = await listOpenClawCronJobs();
+    if (!cron.ok) {
+      const details = cron.unavailableReason === 'scope-upgrade-pending'
+        ? 'Lettura cron diretta da OpenClaw bloccata: scope upgrade pending approval.'
+        : 'Olympus non riesce a leggere i cron direttamente da OpenClaw.';
+      checks.push({ id: 'cron.openclaw', label: 'Cron jobs', health: 'warning', value: 'unavailable', details, source: 'cron' });
+      recommendations.push({ id: 'cron.openclaw-unavailable', severity: 'warning', source: 'cron', title: 'Lista cron OpenClaw non disponibile', details, actionHref: '/crons', dismissible: false, createdAt });
+    } else {
+      const enabled = cron.jobs.filter((job) => job.enabled !== false).length;
+      checks.push({ id: 'cron.jobs', label: 'Cron jobs', health: enabled > 0 ? 'ok' : 'warning', value: enabled, details: `${cron.total} totali · source ${cron.source}`, source: 'cron' });
+      if (enabled === 0) {
+        recommendations.push({ id: 'cron.enable-watchdog', severity: 'warning', source: 'cron', title: 'Nessun cron abilitato rilevato', details: 'OpenClaw non riporta cron abilitati.', actionHref: '/crons', dismissible: false, createdAt });
+      }
     }
   } catch (error) {
-    checks.push({ id: 'cron.store', label: 'Cron store', health: 'warning', value: 'warning', details: (error as Error).message, source: 'cron' });
-    recommendations.push({ id: 'cron.store-unavailable', severity: 'warning', source: 'cron', title: 'Cron store non leggibile', details: 'Olympus non riesce a leggere lo store locale dei cron.', actionHref: '/crons', dismissible: false, createdAt });
+    checks.push({ id: 'cron.openclaw', label: 'Cron jobs', health: 'warning', value: 'warning', details: (error as Error).message, source: 'cron' });
+    recommendations.push({ id: 'cron.openclaw-unavailable', severity: 'warning', source: 'cron', title: 'Lista cron OpenClaw non disponibile', details: 'Olympus non riesce a leggere i cron direttamente da OpenClaw.', actionHref: '/crons', dismissible: false, createdAt });
   }
 
   const health = topHealth(checks.map((check) => check.health));

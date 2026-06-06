@@ -31,7 +31,10 @@ export async function GET(request: NextRequest): Promise<Response> {
             )
             .all(lastEventId) as { id: number }[];
           const sessions = db
-            .prepare('SELECT * FROM sessions ORDER BY started_at DESC LIMIT 100')
+            .prepare(`SELECT s.*, l.label AS lineage_label, l.agent_name AS lineage_agent_name
+                      FROM sessions s
+                      LEFT JOIN lineage l ON s.session_id = l.child_id
+                      ORDER BY s.started_at DESC LIMIT 100`)
             .all();
           const costs = db
             .prepare('SELECT SUM(cost_usd) AS today FROM sessions WHERE started_at >= ?')

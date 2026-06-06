@@ -60,6 +60,59 @@ function formatTs(ms: number): string {
   });
 }
 
+function describeCron(expr: string): string {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length < 5) return '';
+  const [min, hour, dom, month, dow] = parts;
+
+  const every = (f: string) => f === '*' || f === '*/1';
+  const everyN = (f: string) => f.startsWith('*/');
+  const fixed = (f: string) => /^\d+$/.test(f);
+
+  // Every minute
+  if (every(min) && every(hour) && every(dom) && every(month) && every(dow))
+    return 'ogni minuto';
+
+  // Every N minutes: */N * * * *
+  if (everyN(min) && every(hour) && every(dom) && every(month) && every(dow)) {
+    const n = min.split('/')[1];
+    return `ogni ${n} minut${n === '1' ? 'o' : 'i'}`;
+  }
+
+  // Every hour at minute 0: 0 * * * *
+  if (fixed(min) && every(hour) && every(dom) && every(month) && every(dow))
+    return min === '0' ? 'ogni ora' : `ogni ora al minuto ${min}`;
+
+  // Every N hours: 0 */N * * *
+  if (everyN(hour) && every(dom) && every(month) && every(dow)) {
+    const n = hour.split('/')[1];
+    const suffix = fixed(min) && min !== '0' ? ` al minuto ${min}` : '';
+    return `ogni ${n} ore${suffix}`;
+  }
+
+  // Daily at HH:MM: MM HH * * *
+  if (fixed(min) && fixed(hour) && every(dom) && every(month) && every(dow)) {
+    const h = hour.padStart(2, '0'), m = min.padStart(2, '0');
+    return `ogni giorno alle ${h}:${m}`;
+  }
+
+  // Weekly: MM HH * * D
+  if (fixed(min) && fixed(hour) && every(dom) && every(month) && fixed(dow)) {
+    const days = ['dom', 'lun', 'mar', 'mer', 'gio', 'ven', 'sab'];
+    const d = days[parseInt(dow)] ?? dow;
+    const h = hour.padStart(2, '0'), m = min.padStart(2, '0');
+    return `ogni settimana (${d}) alle ${h}:${m}`;
+  }
+
+  // Monthly: MM HH D * *
+  if (fixed(min) && fixed(hour) && fixed(dom) && every(month) && every(dow)) {
+    const h = hour.padStart(2, '0'), m = min.padStart(2, '0');
+    return `il giorno ${dom} di ogni mese alle ${h}:${m}`;
+  }
+
+  return '';
+}
+
 function formatDuration(startMs: number, endMs?: number): string {
   const dur = (endMs ?? Date.now()) - startMs;
   const s = Math.floor(dur / 1000);
@@ -217,10 +270,13 @@ export default function CronsPage() {
 
                   {/* Schedule */}
                   {expr && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 10, color: '#555' }}>schedule</span>
                       <span style={{ fontSize: 11, color: '#60a5fa', fontFamily: 'monospace' }}>{expr}</span>
                       {tz && <span style={{ fontSize: 10, color: '#555' }}>{tz}</span>}
+                      {describeCron(expr) && (
+                        <span style={{ fontSize: 10, color: '#a3a3a3', fontStyle: 'italic' }}>({describeCron(expr)})</span>
+                      )}
                     </div>
                   )}
 

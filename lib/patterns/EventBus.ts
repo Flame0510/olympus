@@ -17,8 +17,8 @@ export interface IDashboardObserver {
 // ── Singleton EventBus ─────────────────────────────────────────────────────
 
 function sessionsFingerprint(data: unknown[]): string {
-  return (data as { session_id?: string; status?: string; cost_usd?: number; label?: string }[])
-    .map((s) => `${s.session_id}|${s.status}|${s.cost_usd}|${s.label}`)
+  return (data as { session_id?: string; parent_id?: string | null; status?: string; cost_usd?: number; label?: string; lineage_label?: string | null }[])
+    .map((s) => `${s.session_id}|${s.parent_id ?? ''}|${s.status}|${s.cost_usd}|${s.label}|${s.lineage_label ?? ''}`)
     .join('\n');
 }
 
