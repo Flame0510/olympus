@@ -130,14 +130,14 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'prometheus',
     label: 'Prometheus',
-    description: 'Agente strategico: planning, obiettivi, decisioni.',
+    description: 'Agente CRM: gestione clienti, progetti, relazioni e analisi.',
     defaults: { id: 'prometheus', name: 'Prometheus', label: 'Prometheus', model: 'openai-codex/gpt-5.4', workspace: '/data/.openclaw/workspace-prometheus', identity: { name: 'Prometheus', emoji: '🔥' } },
   },
   {
-    id: 'forge',
-    label: 'Forge',
+    id: 'atlas',
+    label: 'Atlas',
     description: 'Agente developer: build, PR, refactoring, code review.',
-    defaults: { id: 'forge', name: 'Forge', label: 'Forge Dev', model: 'openai-codex/gpt-5.4-mini', workspace: '/data/.openclaw/workspace-forge', identity: { name: 'Forge', emoji: '⚒️' } },
+    defaults: { id: 'atlas', name: 'Atlas', label: 'Atlas Dev', model: 'openai-codex/gpt-5.4-mini', workspace: '/data/.openclaw/workspace-atlas', identity: { name: 'Atlas', emoji: '🌐' } },
   },
 ];
 
