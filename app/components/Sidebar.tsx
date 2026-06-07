@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -118,6 +118,14 @@ const NAV: NavItem[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [ocVersion, setOcVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/version')
+      .then((r) => r.json())
+      .then((d) => setOcVersion(d.version))
+      .catch(() => {});
+  }, []);
 
   const isActive = (href: string) => {
     const targetPath = href.split('?')[0] || '/';
@@ -155,6 +163,20 @@ export default function Sidebar() {
           <span className="sidebar__title">OLYMPUS</span>
         </div>
         {navItems}
+        {ocVersion && (
+          <div style={{
+            marginTop: 'auto',
+            padding: '12px 16px',
+            fontSize: '10px',
+            color: 'var(--text-dim)',
+            borderTop: '1px solid var(--border)',
+            fontFamily: 'var(--font-mono)',
+            opacity: 0.6,
+            lineHeight: 1.4,
+          }}>
+            {ocVersion}
+          </div>
+        )}
       </aside>
 
       <button
