@@ -9,6 +9,7 @@ import { Skeleton } from './Skeleton';
 interface DashboardHeaderProps {
   costs: Costs;
   loading?: boolean;
+  hideLogo?: boolean;
 }
 
 const CameraIcon = () => (
@@ -18,7 +19,7 @@ const CameraIcon = () => (
   </svg>
 );
 
-export default function DashboardHeader({ costs, loading: dataLoading = false }: DashboardHeaderProps) {
+export default function DashboardHeader({ costs, loading: dataLoading = false, hideLogo = false }: DashboardHeaderProps) {
   const [clock, setClock] = useState('');
   const { loading, takeScreenshot } = useScreenshot();
 
@@ -35,10 +36,13 @@ export default function DashboardHeader({ costs, loading: dataLoading = false }:
 
   return (
     <header className="header">
-      <div className="logo">
-        <img src="/favicon.svg" alt="Olympus" />
-        <span>OLYMPUS</span>
-      </div>
+      {!hideLogo && (
+        <div className="logo">
+          <img src="/favicon.svg" alt="Olympus" />
+          <span>OLYMPUS</span>
+        </div>
+      )}
+      {hideLogo && <div />}
       <div className="meta">
         <div suppressHydrationWarning>
           <span className="meta-value" suppressHydrationWarning>{clock}</span>
