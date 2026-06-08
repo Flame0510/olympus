@@ -1402,13 +1402,13 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    height: 54px;
     background: var(--color-bg-900, #0d0d0d);
     border-top: 1px solid var(--color-border-700, #2a2a2a);
     z-index: 250;
     justify-content: space-around;
     align-items: center;
-    padding: 0 4px;
+    padding: 0 2px;
     box-sizing: border-box;
   }
 
@@ -1417,28 +1417,32 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
     text-decoration: none;
     color: #666;
     font-family: var(--font-mono-stack, monospace);
     transition: color 0.2s;
-    min-width: 56px;
+    min-width: 0;
+    padding: 0 2px;
+  }
+
+  .mobile-bottom-nav__item svg {
+    opacity: 0.7;
+  }
+  .mobile-bottom-nav__item--active svg {
+    opacity: 1;
   }
 
   .mobile-bottom-nav__item--active {
     color: var(--copper, #B87333);
   }
 
-  .mobile-bottom-nav__icon {
-    font-size: 20px;
-    line-height: 1;
-  }
-
   .mobile-bottom-nav__label {
-    font-size: 10px;
+    font-size: 8px;
     line-height: 1;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
   }
 
   /* Nascondi hamburger su mobile */
@@ -1448,7 +1452,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
   /* Padding bottom per non coprire contenuti */
   .app-layout {
-    padding-bottom: 56px;
+    padding-bottom: 54px;
+  }
+
+  /* Chat button alzato sopra la bottom navbar */
+  .ochat__trigger {
+    bottom: 70px !important;
+  }
+  .ochat__panel {
+    bottom: 124px !important;
   }
 }
 
