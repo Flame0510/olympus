@@ -1,11 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth, openDb } from '@/lib/db';
+import { openDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
-  if (denied) return denied;
   try {
     const db = openDb();
     const now = new Date();

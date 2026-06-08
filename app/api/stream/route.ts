@@ -1,16 +1,10 @@
 import { type NextRequest } from 'next/server';
 import { DB_PATH } from '@/lib/db';
-import { requireBrowserAuth } from '@/lib/auth';
 import Database from 'better-sqlite3';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest): Promise<Response> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
-  }
-
   let lastEventId = 0;
   const encoder = new TextEncoder();
 

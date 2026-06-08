@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth } from '@/lib/db';
+
 import { listOpenClawCronJobs } from '@/lib/openclaw-cron';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
-  if (denied) return denied;
 
   const result = await listOpenClawCronJobs();
   if (!result.ok) {

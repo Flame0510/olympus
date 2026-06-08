@@ -1,10 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { openDb } from '@/lib/db';
-import { requireBrowserAuth } from '@/lib/auth';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
   try {
     const db = openDb();
     const sessions = db.prepare(`

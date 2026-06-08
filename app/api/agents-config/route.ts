@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireBrowserAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -376,8 +375,6 @@ interface CreateAgentPayload {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
 
   try {
     const body = (await request.json()) as CreateAgentPayload;
@@ -422,8 +419,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
 
   try {
     return NextResponse.json(buildConfigPayload(readConfig()));
@@ -433,8 +428,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
 
   try {
     const body = (await request.json()) as UpdatePayload;

@@ -1,7 +1,7 @@
 'use client';
 // Composes EventBus, FilterStrategy, and local state into one dashboard hook
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import type { Session, SessionEvent, Costs, FilterConfig, Period, AgentFilter } from '../types';
 import { OlympusEventBus } from '../patterns/EventBus';
@@ -9,6 +9,8 @@ import { buildFilterStrategy } from '../patterns/FilterStrategy';
 import { isCronSession, extractAgentId } from '../patterns/SessionFactory';
 import { isSessionActive } from '../patterns/sessionPresentation';
 import { PERIOD_MS as PERIOD_MAP, PERIODS } from '../types';
+import { adaptCosts } from '../patterns/ApiAdapter';
+import { apiFetch } from '../apiFetch';
 
 function filterFromParams(params: URLSearchParams): Partial<FilterConfig> {
   const patch: Partial<FilterConfig> = {};
@@ -67,7 +69,9 @@ interface DashboardState {
 
 type Action =
   | { type: 'SET_SESSIONS'; sessions: Session[] }
+  | { type: 'SET_EVENTS'; events: SessionEvent[] }
   | { type: 'PREPEND_EVENTS'; events: SessionEvent[] }
+  | { type: 'SET_COSTS'; costs: Partial<Costs> }
   | { type: 'UPDATE_COST_TODAY'; today: number }
   | { type: 'SET_FILTER'; patch: Partial<FilterConfig> }
   | { type: 'SELECT_SESSION'; id: string | null };
@@ -76,11 +80,20 @@ function reducer(state: DashboardState, action: Action): DashboardState {
   switch (action.type) {
     case 'SET_SESSIONS':
       return { ...state, sessions: action.sessions, hasSessionsLoaded: true };
+    case 'SET_EVENTS':
+      return {
+        ...state,
+        events: action.events.slice(0, 50),
+      };
     case 'PREPEND_EVENTS':
       return {
         ...state,
-        events: [...action.events, ...state.events].slice(0, 50),
+        events: [...action.events, ...state.events]
+          .filter((event, index, all) => index === all.findIndex((candidate) => candidate.id === event.id && candidate.ts === event.ts && candidate.session_id === event.session_id && candidate.type === event.type))
+          .slice(0, 50),
       };
+    case 'SET_COSTS':
+      return { ...state, costs: { ...state.costs, ...action.costs }, hasCostLoaded: true };
     case 'UPDATE_COST_TODAY':
       return { ...state, costs: { ...state.costs, today: action.today }, hasCostLoaded: true };
     case 'SET_FILTER':
@@ -121,28 +134,62 @@ export function useDashboard({ initialCosts }: UseDashboardOptions = {}) {
     hasCostLoaded: false,
   });
 
-  const apiToken = process.env.NEXT_PUBLIC_OLYMPUS_TOKEN ?? 'olympus2026';
+  const hasSessionsLoadedRef = useRef(false);
+  const hasCostLoadedRef = useRef(false);
 
   useEffect(() => {
-    fetch(`/api/costs?token=${encodeURIComponent(apiToken)}`)
-      .then((r) => r.json())
-      .then((costs: Partial<Costs>) => {
-        if (typeof costs.today === 'number') dispatch({ type: 'UPDATE_COST_TODAY', today: costs.today });
-      })
-      .catch(() => {});
+    hasSessionsLoadedRef.current = state.hasSessionsLoaded;
+  }, [state.hasSessionsLoaded]);
+
+  useEffect(() => {
+    hasCostLoadedRef.current = state.hasCostLoaded;
+  }, [state.hasCostLoaded]);
+
+  useEffect(() => {
+    const controller = new AbortController();
 
     const unsubscribe = OlympusEventBus.subscribe({
       onSessions: (sessions) => dispatch({ type: 'SET_SESSIONS', sessions }),
       onEvents: (events) => dispatch({ type: 'PREPEND_EVENTS', events }),
       onCostUpdate: (today) => dispatch({ type: 'UPDATE_COST_TODAY', today }),
     });
-    return unsubscribe;
+
+    apiFetch('/api/sessions', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((sessions: Session[]) => {
+        if (!hasSessionsLoadedRef.current && Array.isArray(sessions)) {
+          dispatch({ type: 'SET_SESSIONS', sessions });
+        }
+      })
+      .catch(() => {});
+
+    apiFetch('/api/events?limit=20', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((events: SessionEvent[]) => {
+        if (Array.isArray(events)) dispatch({ type: 'SET_EVENTS', events });
+      })
+      .catch(() => {});
+
+    apiFetch('/api/costs', { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((rawCosts: Partial<Costs>) => {
+        const costs = adaptCosts(rawCosts as Record<string, unknown>);
+        if (!hasCostLoadedRef.current || costs.allTime || costs.byModel.length) {
+          dispatch({ type: 'SET_COSTS', costs });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      controller.abort();
+      unsubscribe();
+    };
   }, []);
 
   const [availableAgents, setAvailableAgents] = useState<string[]>(['all']);
   useEffect(() => {
     const load = () =>
-      fetch(`/api/agents?token=${encodeURIComponent(apiToken)}`)
+      apiFetch('/api/agents')
         .then((r) => r.json())
         .then((ids: string[]) => {
           if (Array.isArray(ids)) setAvailableAgents(['all', ...ids]);

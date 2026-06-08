@@ -2,6 +2,23 @@ import type { ModelCost } from '@/lib/types';
 
 export type BillingMode = 'usage' | 'fixed' | 'credits' | 'unknown';
 
+/**
+ * Economic dollar costs should only include providers we actually bill per usage.
+ * Today that is primarily OpenRouter, plus a small set of explicit pay-per-use aliases
+ * stored without provider prefixes in older rows.
+ */
+const BILLABLE_MODEL_PREFIXES = ['openrouter/'] as const;
+const BILLABLE_ALIAS_PREFIXES = ['deepseek', 'deepseek4', 'or-', 'openrouter', 'qwen', 'kimi', 'glm'] as const;
+const NON_BILLABLE_ALIAS_PATTERNS = [
+  /^gpt-5(\.|-|$)/,
+  /^codex(\.|-|$)/,
+  /^claude(\.|-|$)/,
+  /^claude-cli(\/|$)/,
+  /^anthropic(\/|$)/,
+  /^openai-codex(\/|$)/,
+  /^github-copilot(\/|$)/,
+] as const;
+
 export interface BillingBucket {
   mode: BillingMode;
   cost_usd: number;
@@ -21,10 +38,19 @@ export interface BillingSummary {
   unknownModels: ModelCost[];
 }
 
+export function isBillableDollarModel(model?: string | null): boolean {
+  const m = (model ?? '').trim().toLowerCase();
+  if (!m || m === 'unknown') return false;
+  if (BILLABLE_MODEL_PREFIXES.some((prefix) => m.startsWith(prefix))) return true;
+  if (NON_BILLABLE_ALIAS_PATTERNS.some((pattern) => pattern.test(m))) return false;
+  if (m.includes('/')) return false;
+  return BILLABLE_ALIAS_PREFIXES.some((prefix) => m.startsWith(prefix));
+}
+
 export function classifyBillingModel(model?: string | null): BillingMode {
   const m = (model ?? '').toLowerCase();
   if (!m || m === 'unknown') return 'unknown';
-  if (m.startsWith('openrouter/')) return 'usage';
+  if (isBillableDollarModel(m)) return 'usage';
   if (m.startsWith('openai-codex/')) return 'fixed';
   if (m.startsWith('anthropic/') || m.includes('claude-cli')) return 'fixed';
   if (m.startsWith('github-copilot/')) return 'credits';

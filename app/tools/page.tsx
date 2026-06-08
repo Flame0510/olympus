@@ -1,3 +1,4 @@
+import { requireAuth } from '@/lib/requireAuth';
 import fs from 'fs';
 import ToolsPageClient, { type AudioConfig } from './ToolsPageClient';
 
@@ -45,7 +46,9 @@ function getInitialData(): { audio: AudioConfig; timezone: string; error: string
   }
 }
 
-export default function ToolsPage() {
+export default async function ToolsPage() {
+  await requireAuth();
+
   const { audio, timezone, error } = getInitialData();
   return <ToolsPageClient initialAudio={audio} initialTimezone={timezone} initialError={error} />;
 }

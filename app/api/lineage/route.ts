@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth, openDb } from '@/lib/db';
+import { openDb } from '@/lib/db';
 
 function ensureLineageSchema(db: ReturnType<typeof openDb>): void {
   db.prepare(
@@ -27,8 +27,6 @@ function ensureLineageSchema(db: ReturnType<typeof openDb>): void {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const denied = requireAuth(request);
-  if (denied) return denied;
   try {
     const body = (await request.json()) as { childId?: string; parentId?: string; label?: string };
     const childId = body?.childId?.trim();

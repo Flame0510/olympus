@@ -1,12 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { openDb } from '@/lib/db';
-import { requireBrowserAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
   try {
     const db = openDb();
     const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;

@@ -417,8 +417,8 @@ function parseSessionKey(key) {  // e.g. "agent:website:subagent:abc123" or "age
 }
 
 function inferStatus(session, prevSnapshot) {
-  // If session aborted its last run → error
-  if (session.abortedLastRun) return 'error';
+  // Strong failure signals from OpenClaw win immediately.
+  if (session.abortedLastRun || session.error || session.result === 'error' || session.status === 'error') return 'error';
 
   const ageMs = session.ageMs || 0;
   const tokensIn  = session.inputTokens  || 0;
@@ -438,6 +438,20 @@ function inferStatus(session, prevSnapshot) {
 
   // Not updated for > 30 min → completed
   return 'completed';
+}
+
+function getOrphanResolution(session, snap, ageMs) {
+  const tokens = (session.inputTokens || 0) + (session.outputTokens || 0);
+  const kind = String(session.kind || '');
+  const hadFailureHints = Boolean(session.abortedLastRun || session.error || session.result === 'error');
+  if (hadFailureHints) return 'error';
+  if (tokens === 0 && kind === 'spawn-child') return 'error';
+  if (snap?.status === 'working' && tokens === 0 && ageMs >= 2 * 60 * 1000) return 'error';
+  return 'completed';
+}
+
+function orphanEventType(status) {
+  return status === 'error' ? 'fail' : 'complete';
 }
 
 // ── Main Poll Loop ───────────────────────────────────────────────────────────
@@ -572,30 +586,67 @@ function pollSessions() {
         type: 'complete',
         data: JSON.stringify({ cost_usd, tokens: tokens_in + tokens_out }),
       });
+    } else if (prevSnapshot && prevSnapshot.status !== 'error' && status === 'error') {
+      pendingEvents.push({
+        ts: now,
+        session_id,
+        type: 'fail',
+        data: JSON.stringify({ cost_usd, tokens: tokens_in + tokens_out, reason: 'openclaw_error_signal' }),
+      });
     }
 
-    knownSessions.set(session_id, { status, tokens_in, tokens_out, updatedAt: Date.now() });
+    knownSessions.set(session_id, {
+      status,
+      tokens_in,
+      tokens_out,
+      updatedAt: Date.now(),
+      kind: s.kind,
+      abortedLastRun: s.abortedLastRun,
+      error: s.error,
+      result: s.result,
+    });
     updatedCount++;
   }
 
   if (pendingEvents.length > 0) batchInsertEvents(pendingEvents);
 
   // Auto-close orphan sessions: sessions that were working/idle but disappeared
-  // from openclaw sessions for > 5 minutes (10+ poll cycles) → mark as completed.
+  // from openclaw sessions for > 5 minutes (10+ poll cycles) → mark as completed/error.
   // Grace period protects against transient poll gaps or partial openclaw output.
-  const currentIds = new Set(sessions.map(s => s.key));
+  const currentIds = new Set(sessions.filter(s => !s.key.includes(':telegram:')).map(s => s.key));
   const fiveMinAgo = now - 5 * 60 * 1000;
   if (currentIds.size > 0) {
-    const placeholders = Array.from(currentIds).map(() => '?').join(',');
-    const orphanResult = db.prepare(`
-      UPDATE sessions SET status='completed', ended_at=?
+    const orphanCandidates = db.prepare(`
+      SELECT session_id, status, updated_at, tokens_in, tokens_out, ended_at
+      FROM sessions
       WHERE status IN ('working','idle')
       AND updated_at < ?
-      AND session_id NOT IN (${placeholders})
-    `).run(now, fiveMinAgo, ...currentIds);
-    if (orphanResult.changes > 0) {
-      log(`Orphan cleanup: ${orphanResult.changes} zombie sessions auto-closed (not seen for >5min)`);
+      AND session_id NOT IN (${Array.from(currentIds).map(() => '?').join(',')})
+    `).all(fiveMinAgo, ...currentIds);
+    const orphanEvents = [];
+    let orphanCount = 0;
+    for (const row of orphanCandidates) {
+      const snap = knownSessions.get(row.session_id);
+      const resolved = getOrphanResolution({
+        inputTokens: row.tokens_in,
+        outputTokens: row.tokens_out,
+        kind: snap?.kind,
+        abortedLastRun: snap?.abortedLastRun,
+        error: snap?.error,
+        result: snap?.result,
+      }, snap, now - Number(row.updated_at || 0));
+      const ended_at = row.ended_at || now;
+      db.prepare(`UPDATE sessions SET status=?, ended_at=?, updated_at=? WHERE session_id = ?`).run(resolved, ended_at, now, row.session_id);
+      orphanEvents.push({
+        ts: now,
+        session_id: row.session_id,
+        type: orphanEventType(resolved),
+        data: JSON.stringify({ reason: 'orphan_close', prior_status: row.status, resolved_status: resolved }),
+      });
+      orphanCount++;
     }
+    if (orphanEvents.length > 0) batchInsertEvents(orphanEvents);
+    if (orphanCount > 0) log(`Orphan cleanup: ${orphanCount} zombie sessions auto-closed (${orphanEvents.filter(e => e.type === 'fail').length} errors)`);
   }
 
   // ── Timeout Detection ────────────────────────────────────────────────────

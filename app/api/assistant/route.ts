@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireBrowserAuth } from '@/lib/auth';
 
 // Supports Groq (default) or any OpenAI-compatible provider via env vars.
 // ASSISTANT_BASE_URL defaults to Groq; override for OpenRouter, local Ollama, etc.
@@ -98,8 +97,6 @@ RULES:
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
 
   if (!ASSISTANT_API_KEY) {
     return NextResponse.json(

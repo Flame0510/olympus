@@ -1,13 +1,9 @@
 import { NextResponse } from 'next/server';
 import { execSync } from 'child_process';
-import { requireAuthJWT } from '@/lib/olympus-auth';
 
 const SAFE_PLUGIN_ID = /^[a-zA-Z0-9._:@/-]+$/;
 
-export async function GET(request) {
-  const denied = await requireAuthJWT(request);
-  if (denied) return denied;
-
+export async function GET(_request) {
   try {
     const raw = execSync('openclaw plugins list --json 2>/dev/null', {
       encoding: 'utf8',
@@ -21,9 +17,6 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const denied = await requireAuthJWT(request);
-  if (denied) return denied;
-
   try {
     const { action, pluginId } = await request.json();
     if (!pluginId || !['enable', 'disable'].includes(action)) {

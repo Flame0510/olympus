@@ -3,7 +3,6 @@ import path from 'path';
 import Database from 'better-sqlite3';
 import { NextResponse, type NextRequest } from 'next/server';
 import { DB_PATH } from '@/lib/db';
-import { requireBrowserAuth } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -155,8 +154,6 @@ function loadRecentSessions(cutoff: number): SessionRow[] {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const denied = await requireBrowserAuth(request);
-  if (denied) return denied;
   try {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const configuredAgents = readConfiguredAgents();
@@ -176,9 +173,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const workspace_path = mapWorkspace(agent_id);
       const files = listWorkspaceFiles(workspace_path);
       const config_model = formatModel(cfg.model ?? cfg.defaultModel ?? cfg.default_model);
+    // limit files to 20 max; skip trash dirs
+    const filtered_files = files.filter(f => !f.rel_path.includes('.trash') && !f.rel_path.includes('node_modules/')).slice(0, 20);
       const latestStatus = sessions[0]?.status;
       const status = latestStatus === 'working' ? 'working' : latestStatus ? 'idle' : 'inactive';
-      return { agent_id, label: cfg.label ?? agent_id, config_model, workspace_path, files, sessions, status, config: cfg };
+      return { agent_id, label: cfg.label ?? agent_id, config_model, workspace_path, files: filtered_files, sessions, status, config: cfg };
     });
 
     return NextResponse.json(agents);

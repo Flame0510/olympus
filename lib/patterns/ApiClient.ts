@@ -3,8 +3,15 @@ import type { Session, SessionDetail, Costs, SessionEvent } from '../types';
 import { SessionFactory, EventFactory } from './SessionFactory';
 import { adaptCosts, adaptSession, adaptEvent } from './ApiAdapter';
 
+const API_TOKEN =
+  typeof process !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_OLYMPUS_TOKEN ?? '')
+    : '';
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}token=${encodeURIComponent(API_TOKEN)}`;
+  const res = await fetch(url, {
     ...init,
     credentials: 'same-origin',
     headers: { ...init?.headers },

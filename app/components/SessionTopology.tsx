@@ -32,7 +32,6 @@ function draw(
   isTouch: boolean,
   onNodeClick: (id: string) => void,
   registerReset: (reset: () => void) => void,
-  autoReset: boolean,
 ) {
   const svg = d3.select(svgEl);
   svg.selectAll('*').remove();
@@ -157,7 +156,6 @@ function draw(
   };
 
   registerReset(resetView);
-  if (autoReset) requestAnimationFrame(resetView);
 }
 
 const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(function SessionTopology(
@@ -167,7 +165,8 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const resetRef = useRef<() => void>(() => {});
-  const prevTopologyRef = useRef<string>('');
+  const prevFitKeyRef = useRef<string>('');
+  const fitFrameRef = useRef<number | null>(null);
   const [isTouch, setIsTouch] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -175,6 +174,10 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
 
   const treeData = useMemo(() => buildSessionTree(sessions, filter), [sessions, filter]);
   const hasVisibleNodes = useMemo(() => (treeData.children ?? []).some((node) => node._agentNode ? (node.children?.length ?? 0) > 0 : true), [treeData]);
+  const fitKey = useMemo(() => JSON.stringify({
+    filter,
+    nodes: treeData.children ?? [],
+  }), [filter, treeData]);
 
   useImperativeHandle(ref, () => ({
     resetView: () => resetRef.current(),
@@ -193,36 +196,75 @@ const SessionTopology = forwardRef<SessionTopologyHandle, SessionTopologyProps>(
   useEffect(() => {
     if (!hasVisibleNodes) {
       resetRef.current = () => {};
+      prevFitKeyRef.current = '';
     }
   }, [hasVisibleNodes]);
+
+  useEffect(() => () => {
+    if (fitFrameRef.current !== null) {
+      cancelAnimationFrame(fitFrameRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     const svgEl = svgRef.current;
     const tooltipEl = tooltipRef.current;
     if (!svgEl || !hasVisibleNodes) return;
+    const shouldAutoFit = fitKey !== prevFitKeyRef.current;
+    prevFitKeyRef.current = fitKey;
 
-    // Topology fingerprint: node ids + parent links. Position/layout only changes when topology changes.
-    const topologyKey = JSON.stringify(
-      (treeData.children ?? []).flatMap((n) =>
-        [n.session_id, ...(n.children ?? []).map((c) => c.session_id)]
-      )
-    );
-    const topologyChanged = topologyKey !== prevTopologyRef.current;
-    prevTopologyRef.current = topologyKey;
+    const scheduleAutoFit = () => {
+      if (!shouldAutoFit) return;
 
-    const render = (autoReset: boolean) => {
+      if (fitFrameRef.current !== null) {
+        cancelAnimationFrame(fitFrameRef.current);
+      }
+
+      let attempts = 0;
+      const runFit = () => {
+        fitFrameRef.current = requestAnimationFrame(() => {
+          const contentNode = svgEl.querySelector('g > g');
+          const bbox = contentNode && typeof (contentNode as SVGGElement).getBBox === 'function'
+            ? (contentNode as SVGGElement).getBBox()
+            : null;
+
+          if ((!svgEl.clientWidth || !svgEl.clientHeight || !bbox || !bbox.width || !bbox.height) && attempts < 6) {
+            attempts += 1;
+            runFit();
+            return;
+          }
+
+          resetRef.current();
+          fitFrameRef.current = null;
+        });
+      };
+
+      runFit();
+    };
+
+    const render = (autoFit: boolean) => {
       const width = svgEl.clientWidth || 900;
       const height = svgEl.clientHeight || 480;
       draw(svgEl, tooltipEl, width, height, treeData, isTouch, onNodeClick, (reset) => {
         resetRef.current = reset;
-      }, autoReset);
+      });
+
+      if (autoFit) {
+        scheduleAutoFit();
+      }
     };
 
-    render(topologyChanged);
+    render(shouldAutoFit);
     const ro = new ResizeObserver(() => render(false));
     ro.observe(svgEl);
-    return () => ro.disconnect();
-  }, [hasVisibleNodes, isTouch, treeData, onNodeClick]);
+    return () => {
+      ro.disconnect();
+      if (fitFrameRef.current !== null) {
+        cancelAnimationFrame(fitFrameRef.current);
+        fitFrameRef.current = null;
+      }
+    };
+  }, [fitKey, hasVisibleNodes, isTouch, treeData, onNodeClick]);
 
   return (
     <>

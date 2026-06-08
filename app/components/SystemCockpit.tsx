@@ -101,6 +101,7 @@ export default function SystemCockpit({ sessions, events, costs, loading = false
   const costCheck = findCheck(checks, 'cost.usageBasedToday');
   const health = systemHealth?.health ?? 'warning';
   const recommendations = systemHealth?.recommendations ?? [];
+  const runtimeFreshness = runtimeCheck?.details ?? fmtAge(metrics.latest);
 
   return (
     <section className="cockpit">
@@ -109,7 +110,7 @@ export default function SystemCockpit({ sessions, events, costs, loading = false
           <div className="ui-kicker">Argus System Health</div>
           <div className="cockpit__health-row">
             {systemLoading ? <SkeletonMetric width={120} /> : <span className={`cockpit__health cockpit__health--${health}`}>{health}</span>}
-            <span className="ui-muted" style={{ fontSize: 11 }}>ultimo evento {fmtAge(metrics.latest)}</span>
+            <span className="ui-muted" style={{ fontSize: 11 }}>{runtimeFreshness}</span>
           </div>
           <div className="ui-muted" style={{ marginTop: 10, fontSize: 11 }}>Monitor server-side da `/api/system-health`.</div>
         </Surface>
@@ -120,7 +121,7 @@ export default function SystemCockpit({ sessions, events, costs, loading = false
 
       <div className="cockpit__main">
         <div className="cockpit__checks">
-          <StatusCard loading={systemLoading} title="Runtime Olympus" health={runtimeCheck?.health ?? 'warning'} rows={[[runtimeCheck?.label ?? 'Sessioni totali', runtimeCheck?.value ?? sessions.length], ['Ultimo aggiornamento', fmtAge(metrics.latest)], ['Errori feed recente', metrics.errors]]} />
+          <StatusCard loading={systemLoading} title="Runtime Olympus" health={runtimeCheck?.health ?? 'warning'} rows={[[runtimeCheck?.label ?? 'Sessioni totali', runtimeCheck?.value ?? sessions.length], ['Ultimo aggiornamento', runtimeFreshness], ['Errori feed recente', metrics.errors]]} />
           <StatusCard loading={systemLoading} title="Cron / Watchdog" health={cronCheck?.health ?? 'warning'} rows={[[cronCheck?.label ?? 'Cron', cronCheck?.value ?? 'n/d'], ['Dettaglio', cronCheck?.details ?? 'n/d'], ['Sorgente', '/api/system-health']]} />
           <StatusCard loading={systemLoading} title="Shared Context" health={memoryCheck?.health ?? 'warning'} rows={[[memoryCheck?.label ?? 'Shared context', memoryCheck?.value ?? 'n/d'], ['Dettaglio', memoryCheck?.details ?? 'n/d'], ['Pagina', <Link key="memory" href="/memory" className="ui-link">Apri memory →</Link>]]} />
           <StatusCard loading={loading} title="Lineage" health={sessions.length ? 'ok' : 'warning'} rows={[[ 'Sessioni totali', sessions.length], ['Eventi live', events.length], ['Vista completa', <Link key="lineage" href="/lineage" className="ui-link">Apri grafo →</Link>]]} />

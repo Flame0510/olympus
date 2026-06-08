@@ -74,14 +74,7 @@ function subagentFallback(sessionId: string): string {
 }
 
 export function isSessionActive(session: Pick<Session, 'status' | 'updated_at' | 'session_id'>): boolean {
-  if (ACTIVE_STATUSES.has(session.status)) return true;
-  if (session.status !== 'idle') return false;
-
-  const updatedAt = Number(session.updated_at ?? 0);
-  if (!updatedAt) return false;
-  const updatedMs = updatedAt < 1e12 ? updatedAt * 1000 : updatedAt;
-  const staleMs = session.session_id?.endsWith(':main') ? 8 * 60 * 60 * 1000 : 60 * 60 * 1000;
-  return Date.now() - updatedMs < staleMs;
+  return ACTIVE_STATUSES.has(session.status);
 }
 
 export function deriveSessionDisplayLabel(session: Pick<Session, 'session_id' | 'label' | 'lineage_label' | 'task_preview'>): string {

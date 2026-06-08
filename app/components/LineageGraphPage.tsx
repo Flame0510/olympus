@@ -26,6 +26,7 @@ export default function LineageGraphPage({ initialCosts }: LineageGraphPageProps
     visibleEvents,
     setFilter,
     selectSession,
+    hasSessionsLoaded,
     hasCostLoaded,
   } = useDashboard({ initialCosts });
 
@@ -113,19 +114,26 @@ export default function LineageGraphPage({ initialCosts }: LineageGraphPageProps
                 ⊙ Reimposta vista
               </button>
             </div>
-            <SessionTopology
-              ref={topologyRef}
-              sessions={visibleSessions}
-              filter={filter.agent}
-              onNodeClick={selectSession}
-              emptyMessage={filter.showOnlyActive ? 'Nessuna sessione attiva nel periodo selezionato' : 'Nessuna sessione visibile con i filtri correnti'}
-            />
+            {hasSessionsLoaded ? (
+              <SessionTopology
+                ref={topologyRef}
+                sessions={visibleSessions}
+                filter={filter.agent}
+                onNodeClick={selectSession}
+                emptyMessage={filter.showOnlyActive ? 'Nessuna sessione attiva nel periodo selezionato' : 'Nessuna sessione visibile con i filtri correnti'}
+              />
+            ) : (
+              <div className="empty-state">
+                <span className="empty-state-icon">◎</span>
+                <span className="empty-state-msg">Loading lineage…</span>
+              </div>
+            )}
           </article>
         )}
 
         {(!isMobile || mobileTab !== 'graph') && (
           <aside className="side" style={isMobile ? { height: '100%' } : undefined}>
-            {(!isMobile || mobileTab === 'feed') && <LiveFeed events={visibleEvents} />}
+            {(!isMobile || mobileTab === 'feed') && <LiveFeed events={hasSessionsLoaded ? visibleEvents : []} />}
             {(!isMobile || mobileTab === 'costs') && <CostBreakdown byModel={costs.byModel} />}
           </aside>
         )}

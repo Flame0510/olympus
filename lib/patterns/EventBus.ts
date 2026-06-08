@@ -1,10 +1,8 @@
 'use client';
 // Observer + Singleton: manages one shared SSE connection; components subscribe as observers
 
-import type { StreamMessage, Session, SessionEvent, Costs } from '../types';
+import type { StreamMessage, Session, SessionEvent } from '../types';
 import { SessionFactory, EventFactory } from './SessionFactory';
-import { adaptCosts } from './ApiAdapter';
-
 
 // ── Observer interface ─────────────────────────────────────────────────────
 
@@ -28,6 +26,9 @@ class OlympusEventBusClass {
   private source: EventSource | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSessionsHash = '';
+  private latestSessions: Session[] | null = null;
+  private latestEvents: SessionEvent[] | null = null;
+  private latestCostToday: number | null = null;
 
   private constructor() {}
 
@@ -38,6 +39,7 @@ class OlympusEventBusClass {
 
   subscribe(observer: IDashboardObserver): () => void {
     this.observers.add(observer);
+    this.replayTo(observer);
     if (this.observers.size === 1) this.connect();
     return () => this.unsubscribe(observer);
   }
@@ -78,20 +80,31 @@ class OlympusEventBusClass {
     this.source = null;
   }
 
+  private replayTo(observer: IDashboardObserver): void {
+    if (this.latestSessions && observer.onSessions) observer.onSessions(this.latestSessions);
+    if (this.latestEvents && observer.onEvents) observer.onEvents(this.latestEvents);
+    if (this.latestCostToday !== null && observer.onCostUpdate) observer.onCostUpdate(this.latestCostToday);
+  }
+
   private dispatch(msg: StreamMessage): void {
     if (msg.type === 'sessions') {
       const hash = sessionsFingerprint(Array.isArray(msg.data) ? msg.data : []);
       if (hash === this.lastSessionsHash) return;
       this.lastSessionsHash = hash;
+      this.latestSessions = SessionFactory.createMany(msg.data);
+    } else if (msg.type === 'events') {
+      this.latestEvents = EventFactory.createMany(msg.data);
+    } else if (msg.type === 'costs') {
+      this.latestCostToday = Number(msg.data?.today ?? 0);
     }
 
     for (const obs of this.observers) {
-      if (msg.type === 'sessions' && obs.onSessions) {
-        obs.onSessions(SessionFactory.createMany(msg.data));
-      } else if (msg.type === 'events' && obs.onEvents) {
-        obs.onEvents(EventFactory.createMany(msg.data));
-      } else if (msg.type === 'costs' && obs.onCostUpdate) {
-        obs.onCostUpdate(Number(msg.data?.today ?? 0));
+      if (msg.type === 'sessions' && obs.onSessions && this.latestSessions) {
+        obs.onSessions(this.latestSessions);
+      } else if (msg.type === 'events' && obs.onEvents && this.latestEvents) {
+        obs.onEvents(this.latestEvents);
+      } else if (msg.type === 'costs' && obs.onCostUpdate && this.latestCostToday !== null) {
+        obs.onCostUpdate(this.latestCostToday);
       }
     }
   }

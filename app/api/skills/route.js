@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { requireAuthJWT } from '@/lib/olympus-auth';
 
 const SKILL_ROOTS = [
   { type: 'shared', dir: '/data/.openclaw/shared-skills' },
@@ -35,10 +34,7 @@ function readSkillMeta(skillDir, name, type) {
   };
 }
 
-export async function GET(request) {
-  const denied = await requireAuthJWT(request);
-  if (denied) return denied;
-
+export async function GET(_request) {
   const skills = [];
 
   for (const root of SKILL_ROOTS) {

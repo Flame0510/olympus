@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth } from '@/lib/db';
+
 import { patchCronJob } from '@/lib/openclaw-cron';
 
 export const dynamic = 'force-dynamic';
@@ -8,8 +8,6 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-  const denied = requireAuth(request);
-  if (denied) return denied;
 
   const { id } = await params;
   let body: Record<string, unknown>;

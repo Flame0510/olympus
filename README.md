@@ -41,6 +41,11 @@ Dashboard available at: `http://localhost:3720`
 | `OLYMPUS_DB` | `./events.db` | SQLite database path |
 | `GROQ_API_KEY` | — | API key for PYTHIA assistant (Groq default) |
 | `ASSISTANT_MODEL` | `llama-3.1-8b-instant` | LLM model for PYTHIA |
+| `OLYMPUS_ALERTS_ENABLED` | `false` | Enable Telegram alerting |
+| `OLYMPUS_TELEGRAM_BOT_TOKEN` | — | Telegram bot token (empty = safe dry-run/no-op) |
+| `OLYMPUS_TELEGRAM_CHAT_ID` | — | Telegram chat id for alerts |
+| `OLYMPUS_ALERT_COOLDOWN_MS` | `600000` | Cooldown per alert key |
+| `OLYMPUS_ALERT_STALE_SECONDS` | `120` | Freshness threshold for DB staleness |
 
 ## Architecture
 

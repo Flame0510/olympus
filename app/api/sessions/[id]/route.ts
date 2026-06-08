@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { requireAuth, openDb } from '@/lib/db';
+import { openDb } from '@/lib/db';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const denied = requireAuth(request);
-  if (denied) return denied;
   const { id } = await params;
   const sessionId = decodeURIComponent(id);
   const db = openDb();

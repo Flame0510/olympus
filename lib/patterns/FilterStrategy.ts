@@ -22,7 +22,7 @@ export class AgentFilterStrategy implements IFilterStrategy {
 
 export class ActiveOnlyFilterStrategy implements IFilterStrategy {
   filter(sessions: Session[]): Session[] {
-    return sessions.filter(isSessionActive);
+    return sessions.filter((s) => isSessionActive(s) && s.status !== 'idle');
   }
 }
 
