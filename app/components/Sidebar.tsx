@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import MobileBottomNav from './MobileBottomNav';
 
 interface NavItem {
   href: string;
@@ -221,6 +222,7 @@ export default function Sidebar() {
           </aside>
         </div>
       )}
+      <MobileBottomNav />
     </>
   );
 }
