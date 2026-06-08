@@ -15,16 +15,14 @@ export default function PluginsPage() {
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '0 20px',
+        padding: '0 14px',
         height: 48,
-        borderBottom: '1px solid #222228',
-        background: '#111114',
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
         flexShrink: 0,
+        boxSizing: 'border-box',
       }}>
-        <span style={{ fontFamily: "'Instrument Serif', serif", fontSize: 18, letterSpacing: 4, color: '#B87333' }}>OLYMPUS</span>
-        <span style={{ marginLeft: 16, fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.1em', color: '#B87333' }}>
-          PLUGINS
-        </span>
+        <span style={{ color: 'var(--copper)', fontSize: 12, letterSpacing: '0.08em' }}>PLUGINS</span>
       </div>
       <div style={{ flex: 1, overflow: 'hidden' }}>
         <PluginsTab />

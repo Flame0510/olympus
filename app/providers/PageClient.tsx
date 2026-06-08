@@ -322,8 +322,9 @@ export default function ProvidersPage() {
       fontFamily: 'var(--font-mono-stack)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
       <div style={{
-        padding: '10px 14px', borderBottom: '1px solid var(--border)',
+        height: '48px', padding: '0 14px', borderBottom: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0, boxSizing: 'border-box'
       }}>
         <span style={{ color: 'var(--copper)', fontSize: 12, letterSpacing: '0.08em' }}>PROVIDERS</span>
         <span style={{ fontSize: 10, color: '#555' }}>

@@ -99,12 +99,16 @@ export default function ToolsPageClient({ initialAudio = {}, initialTimezone = '
   }, []);
 
   async function handleSave() {
-    if (!audio) return;
     setSaving(true);
     setError(null);
     setSuccess(false);
     try {
-      const res = await fetch('/api/tools-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ audio }) });
+      const res = await fetch('/api/tools-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ audio }),
+      });
       const data = (await res.json()) as { ok?: boolean; error?: string; audio?: AudioConfig };
       if (!res.ok) throw new Error(data.error ?? 'Save failed');
       if (data.audio) setAudio(data.audio);
@@ -132,123 +136,129 @@ export default function ToolsPageClient({ initialAudio = {}, initialTimezone = '
   const catalog = useMemo(() => TOOL_CATALOG.map((category) => ({ ...category, tools: category.tools.map((tool) => ({ ...tool, status: tool.name === 'tts' ? audioStatus : tool.status ?? 'Available' })) })), [audioStatus]);
 
   return (
-    <div style={pageScrollStyle}>
-      <div style={pageInnerStyle}>
-        <header style={heroStyle}>
-          <div style={{ minWidth: 0 }}>
-            <p style={eyebrowStyle}>OpenClaw inventory</p>
-            <h1 style={titleStyle}>Tools</h1>
-            <p style={ledeStyle}>A compact inventory of OpenClaw tools. Configure the exposed base tools here, then use the catalog as a quick reference for available capabilities.</p>
-          </div>
-          <div style={heroPillStyle}>{configuredCount}/{CONFIGURABLE_TOOL_COUNT} configurable ready</div>
-        </header>
+    <div style={{ height: '100vh', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-mono-stack)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <header style={{ height: '48px', padding: '0 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxSizing: 'border-box' }}>
+        <span style={{ color: 'var(--copper)', fontSize: 12, letterSpacing: '0.08em' }}>TOOLS</span>
+        <div style={heroPillStyle}>{configuredCount}/{CONFIGURABLE_TOOL_COUNT} configurable ready</div>
+      </header>
 
-        <section aria-label="Tools overview" style={overviewStyle}>
-          {[[ 'Total tools', TOTAL_TOOL_COUNT ], [ 'Configurable', CONFIGURABLE_TOOL_COUNT ], [ 'Configured', configuredCount ], [ 'Categories', TOOL_CATALOG.length ]].map(([label, value]) => (
-            <div key={label} style={metricStyle}><span style={metricLabelStyle}>{label}</span><strong style={metricValueStyle}>{value}</strong></div>
-          ))}
-        </section>
+      <div style={pageScrollStyle}>
+        <div style={pageInnerStyle}>
+          <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '18px', marginBottom: '18px', paddingBottom: '18px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ minWidth: 0 }}>
+              <p style={eyebrowStyle}>OpenClaw inventory</p>
+              <h1 style={titleStyle}>Tools</h1>
+              <p style={ledeStyle}>A compact inventory of OpenClaw tools. Configure the exposed base tools here, then use the catalog as a quick reference for available capabilities.</p>
+            </div>
+          </header>
 
-        {loading && <p style={{ color: 'var(--text-dim)' }}>Loading…</p>}
+          <section aria-label="Tools overview" style={overviewStyle}>
+            {[[ 'Total tools', TOTAL_TOOL_COUNT ], [ 'Configurable', CONFIGURABLE_TOOL_COUNT ], [ 'Configured', configuredCount ], [ 'Categories', TOOL_CATALOG.length ]].map(([label, value]) => (
+              <div key={label} style={metricStyle}><span style={metricLabelStyle}>{label}</span><strong style={metricValueStyle}>{value}</strong></div>
+            ))}
+          </section>
 
-        {!loading && audio && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-            <section>
-              <SectionHeading title="Base tools" description="Editable tool configuration currently exposed in Olympus. Credentials remain hidden." action={<StatusBadge status={audioStatus} />} />
-              <div style={configCardStyle}>
-                <div style={configHeaderStyle}>
-                  <div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>Audio Transcription</h3>
-                    <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.5 }}>Primary speech-to-text provider settings used by the audio tool.</p>
+          {loading && <p style={{ color: 'var(--text-dim)' }}>Loading…</p>}
+
+          {!loading && audio && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              <section>
+                <SectionHeading title="Base tools" description="Editable tool configuration currently exposed in Olympus. Credentials remain hidden." action={<StatusBadge status={audioStatus} />} />
+                <div style={configCardStyle}>
+                  <div style={configHeaderStyle}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>Audio Transcription</h3>
+                      <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.5 }}>Primary speech-to-text provider settings used by the audio tool.</p>
+                    </div>
+                    <label style={switchRowStyle}>
+                      <input type="checkbox" checked={audio.enabled ?? false} onChange={(e) => setAudio((p) => (p ? { ...p, enabled: e.target.checked } : p))} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                      <span>Enabled</span>
+                    </label>
                   </div>
-                  <label style={switchRowStyle}>
-                    <input type="checkbox" checked={audio.enabled ?? false} onChange={(e) => setAudio((p) => (p ? { ...p, enabled: e.target.checked } : p))} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                    <span>Enabled</span>
-                  </label>
-                </div>
-                <div style={formGridStyle}>
-                  <Field label="Timeout (seconds)"><input type="number" value={audio.timeoutSeconds ?? ''} onChange={(e) => setAudio((p) => (p ? { ...p, timeoutSeconds: Number(e.target.value) } : p))} style={inputStyle} /></Field>
-                  <Field label="Max bytes"><input type="number" value={audio.maxBytes ?? ''} onChange={(e) => setAudio((p) => (p ? { ...p, maxBytes: Number(e.target.value) } : p))} style={inputStyle} /></Field>
-                </div>
-                <div style={subsectionStyle}>
-                  <p style={subsectionTitleStyle}>Model (primary)</p>
                   <div style={formGridStyle}>
-                    <Field label="Provider"><input type="text" value={model.provider} onChange={(e) => updateModel('provider', e.target.value)} style={inputStyle} /></Field>
-                    <Field label="Model"><input type="text" value={model.model} onChange={(e) => updateModel('model', e.target.value)} style={inputStyle} /></Field>
-                    <Field label="Base URL"><input type="text" value={model.baseUrl ?? ''} onChange={(e) => updateModel('baseUrl', e.target.value)} style={inputStyle} /></Field>
+                    <Field label="Timeout (seconds)"><input type="number" value={audio.timeoutSeconds ?? ''} onChange={(e) => setAudio((p) => (p ? { ...p, timeoutSeconds: Number(e.target.value) } : p))} style={inputStyle} /></Field>
+                    <Field label="Max bytes"><input type="number" value={audio.maxBytes ?? ''} onChange={(e) => setAudio((p) => (p ? { ...p, maxBytes: Number(e.target.value) } : p))} style={inputStyle} /></Field>
                   </div>
-                </div>
-                {error && <p style={{ color: 'var(--destructive, #ef4444)', fontSize: '13px', margin: '16px 0 0' }}>{error}</p>}
-                {success && <p style={{ color: 'var(--success, #22c55e)', fontSize: '13px', margin: '16px 0 0' }}>Saved successfully.</p>}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}><button onClick={() => void handleSave()} disabled={saving} style={buttonStyle(saving)}>{saving ? 'Saving…' : 'Save changes'}</button></div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeading title="System Settings" description="Global runtime preferences for the Olympus dashboard." />
-              <div style={configCardStyle}>
-                <div style={configHeaderStyle}>
-                  <div>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>Time Zone</h3>
-                    <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.5 }}>Used by all dashboards to display session timestamps. Current time: <strong style={{ color: 'var(--foreground)' }}>{clock}</strong> in {timezone}.</p>
-                  </div>
-                </div>
-                <div style={formGridStyle}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={fieldLabelStyle}>Time zone</label>
-                    <select value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-                      {TIMEZONE_OPTIONS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
-                  <button onClick={async () => {
-                    setSaving(true); setError(null); setSuccess(false);
-                    try {
-                      const res = await fetch('/api/tools-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ timezone }) });
-                      const data = (await res.json()) as { ok?: boolean; error?: string };
-                      if (!res.ok) throw new Error(data.error ?? 'Save failed');
-                      setSuccess(true);
-                      setTimeout(() => setSuccess(false), 3000);
-                    } catch (e: unknown) { setError((e as Error).message); }
-                    finally { setSaving(false); }
-                  }} disabled={saving} style={buttonStyle(saving)}>{saving ? 'Saving…' : 'Save timezone'}</button>
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <SectionHeading title="Tool catalog" description="Full inventory grouped by capability. Rows are lighter here because most tools do not need page-level configuration yet." />
-              <div style={catalogGridStyle}>
-                {catalog.map((category) => (
-                  <div key={category.name} style={categoryCardStyle}>
-                    <div style={categoryHeaderStyle}>
-                      <svg viewBox={category.viewBox || '0 0 24 24'} style={{ width: 22, height: 22, flex: '0 0 auto' }} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                        <path d={category.icon} />
-                      </svg>
-                      <div style={{ minWidth: 0 }}>
-                        <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>{category.name}</h3>
-                        <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '12px', lineHeight: 1.45 }}>{category.description}</p>
-                      </div>
-                      <span style={countPillStyle}>{category.tools.length}</span>
+                  <div style={subsectionStyle}>
+                    <p style={subsectionTitleStyle}>Model (primary)</p>
+                    <div style={formGridStyle}>
+                      <Field label="Provider"><input type="text" value={model.provider} onChange={(e) => updateModel('provider', e.target.value)} style={inputStyle} /></Field>
+                      <Field label="Model"><input type="text" value={model.model} onChange={(e) => updateModel('model', e.target.value)} style={inputStyle} /></Field>
+                      <Field label="Base URL"><input type="text" value={model.baseUrl ?? ''} onChange={(e) => updateModel('baseUrl', e.target.value)} style={inputStyle} /></Field>
                     </div>
-                    <div style={toolListStyle}>
-                      {category.tools.map((tool) => (
-                        <div key={tool.name} style={toolRowStyle}>
-                          <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, flex: '0 0 auto', marginTop: 2, stroke: 'var(--text-dim)' }} fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                            <path d={tool.icon} />
-                          </svg>
-                          <div style={{ minWidth: 0 }}><p style={{ margin: '0 0 4px', color: 'var(--foreground)', fontSize: '13px', fontWeight: 650 }}>{tool.name}</p><p style={{ margin: 0, color: 'var(--text-dim)', fontSize: '12px', lineHeight: 1.45 }}>{tool.description}</p></div>
-                          <StatusBadge status={tool.status} />
+                  </div>
+                  {error && <p style={{ color: 'var(--destructive, #ef4444)', fontSize: '13px', margin: '16px 0 0' }}>{error}</p>}
+                  {success && <p style={{ color: 'var(--success, #22c55e)', fontSize: '13px', margin: '16px 0 0' }}>Saved successfully.</p>}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}><button onClick={() => void handleSave()} disabled={saving} style={buttonStyle(saving)}>{saving ? 'Saving…' : 'Save changes'}</button></div>
+                </div>
+              </section>
+
+              <section>
+                <SectionHeading title="System Settings" description="Global runtime preferences for the Olympus dashboard." />
+                <div style={configCardStyle}>
+                  <div style={configHeaderStyle}>
+                    <div>
+                      <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>Time Zone</h3>
+                      <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '13px', lineHeight: 1.5 }}>Used by all dashboards to display session timestamps. Current time: <strong style={{ color: 'var(--foreground)' }}>{clock}</strong> in {timezone}.</p>
+                    </div>
+                  </div>
+                  <div style={formGridStyle}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label style={fieldLabelStyle}>Time zone</label>
+                      <select value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                        {TIMEZONE_OPTIONS.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '18px' }}>
+                    <button onClick={async () => {
+                      setSaving(true); setError(null); setSuccess(false);
+                      try {
+                        const res = await fetch('/api/tools-config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ timezone }) });
+                        const data = (await res.json()) as { ok?: boolean; error?: string };
+                        if (!res.ok) throw new Error(data.error ?? 'Save failed');
+                        setSuccess(true);
+                        setTimeout(() => setSuccess(false), 3000);
+                      } catch (e: unknown) { setError((e as Error).message); }
+                      finally { setSaving(false); }
+                    }} disabled={saving} style={buttonStyle(saving)}>{saving ? 'Saving…' : 'Save timezone'}</button>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <SectionHeading title="Tool catalog" description="Full inventory grouped by capability. Rows are lighter here because most tools do not need page-level configuration yet." />
+                <div style={catalogGridStyle}>
+                  {catalog.map((category) => (
+                    <div key={category.name} style={categoryCardStyle}>
+                      <div style={categoryHeaderStyle}>
+                        <svg viewBox={category.viewBox || '0 0 24 24'} style={{ width: 22, height: 22, flex: '0 0 auto' }} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          <path d={category.icon} />
+                        </svg>
+                        <div style={{ minWidth: 0 }}>
+                          <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0, color: 'var(--foreground)' }}>{category.name}</h3>
+                          <p style={{ margin: '5px 0 0', color: 'var(--text-dim)', fontSize: '12px', lineHeight: 1.45 }}>{category.description}</p>
                         </div>
-                      ))}
+                        <span style={countPillStyle}>{category.tools.length}</span>
+                      </div>
+                      <div style={toolListStyle}>
+                        {category.tools.map((tool) => (
+                          <div key={tool.name} style={toolRowStyle}>
+                            <svg viewBox="0 0 24 24" style={{ width: 16, height: 16, flex: '0 0 auto', marginTop: 2, stroke: 'var(--text-dim)' }} fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                              <path d={tool.icon} />
+                            </svg>
+                            <div style={{ minWidth: 0 }}><p style={{ margin: '0 0 4px', color: 'var(--foreground)', fontSize: '13px', fontWeight: 650 }}>{tool.name}</p><p style={{ margin: 0, color: 'var(--text-dim)', fontSize: '12px', lineHeight: 1.45 }}>{tool.description}</p></div>
+                            <StatusBadge status={tool.status} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
