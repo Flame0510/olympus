@@ -79,7 +79,7 @@ export const PERIOD_MS: Record<Exclude<Period, 'all'>, number> = {
   '30d': 2_592_000_000,
 };
 
-export const ACTIVE_STATUSES = new Set<SessionStatus>(['working', 'active']);
+export const ACTIVE_STATUSES = new Set<SessionStatus>(['working', 'active', 'idle']);
 
 // Tree node for SessionTopology (D3)
 export interface TreeNode {

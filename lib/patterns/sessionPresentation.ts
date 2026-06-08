@@ -73,8 +73,13 @@ function subagentFallback(sessionId: string): string {
   return agentName ? `${agentName} · ${suffix}` : suffix ? `Task ${suffix}` : 'Task';
 }
 
+const ACTIVE_WINDOW_MS = 5 * 60_000; // 5 minutes
+
 export function isSessionActive(session: Pick<Session, 'status' | 'updated_at' | 'session_id'>): boolean {
-  return ACTIVE_STATUSES.has(session.status);
+  if (ACTIVE_STATUSES.has(session.status)) return true;
+  // Also consider recently-updated sessions as active (just finished / heartbeat)
+  if (session.updated_at && Date.now() - session.updated_at < ACTIVE_WINDOW_MS) return true;
+  return false;
 }
 
 export function deriveSessionDisplayLabel(session: Pick<Session, 'session_id' | 'label' | 'lineage_label' | 'task_preview'>): string {
