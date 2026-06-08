@@ -372,6 +372,24 @@ interface CreateAgentPayload {
   model?: string;
   defaultModel?: string;
   identity?: { name?: string; emoji?: string };
+  templateId?: string;
+}
+
+const AGENT_TEMPLATES_DIR = path.resolve(process.cwd(), 'agent-templates');
+
+function copyTemplateFiles(templateId: string, workspace: string): string[] {
+  const src = path.join(AGENT_TEMPLATES_DIR, templateId);
+  if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) return [];
+  const created: string[] = [];
+  for (const entry of fs.readdirSync(src, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const rel = path.relative(src, path.join(entry.parentPath ?? src, entry.name));
+    const dest = path.join(workspace, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(entry.parentPath ?? src, entry.name), dest);
+    created.push(rel);
+  }
+  return created;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -412,7 +430,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     };
 
     writeConfig(nextConfig);
-    return NextResponse.json({ success: true, data: buildConfigPayload(nextConfig) });
+
+    // Copy workspace template files if templateId is provided
+    const templateId = normalizeString(body.templateId);
+    const workspace = normalizeString(newAgent.workspace ?? '');
+    let templateFiles: string[] = [];
+    if (templateId && workspace) {
+      try {
+        templateFiles = copyTemplateFiles(templateId, workspace);
+      } catch (e) {
+        // Non-blocking: agent is created even if template copy fails
+        console.error(`Template copy failed for ${templateId} → ${workspace}:`, (e as Error).message);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: buildConfigPayload(nextConfig), templateFiles });
   } catch (error: unknown) {
     return NextResponse.json({ error: (error as Error).message }, { status: 400 });
   }

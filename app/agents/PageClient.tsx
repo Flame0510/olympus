@@ -534,6 +534,7 @@ export default function AgentsPage() {
           model: wizardForm.model.trim() || undefined,
           workspace: wizardForm.workspace.trim() || undefined,
           identity: (wizardForm.identity.name || wizardForm.identity.emoji) ? wizardForm.identity : undefined,
+          templateId: wizardTemplate.id || undefined,
         }),
       });
       const data = (await res.json()) as { error?: string; data?: AgentChannelSummary[] };
