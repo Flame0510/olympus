@@ -297,7 +297,7 @@ export default function ChatClient() {
     fetch(`/api/chat/sessions?agentId=${selectedAgent}&limit=50`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setSessions(data); })
-      .catch(() => {});
+      .catch(e => console.error('fetchSessions error:', e));
   }, [selectedAgent]);
 
   // Load sessions list
@@ -313,6 +313,10 @@ export default function ChatClient() {
     }
     fetch(`/api/chat/history?sessionKey=${encodeURIComponent(selectedSessionKey)}&limit=100`)
       .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
       .then((data: any) => {
         let messages: ChatMessage[] = [];
         if (Array.isArray(data)) {
@@ -320,7 +324,7 @@ export default function ChatClient() {
             const role = m.role === 'assistant' ? 'agent' : (m.role === 'user' ? 'user' : 'user');
             return {
               id: i,
-              ts: m.timestamp || Date.now(),
+              ts: m.ts || m.timestamp || Date.now(),
               user_id: role === 'user' ? USER_ID : selectedAgent,
               role,
               content: extractTextContent(m.content),
@@ -338,7 +342,7 @@ export default function ChatClient() {
           }
         }));
       })
-      .catch(() => {});
+      .catch(e => console.error('fetchHistory error:', e, 'sessionKey:', selectedSessionKey));
   }, [selectedAgent, selectedSessionKey]);
 
   useEffect(() => {
