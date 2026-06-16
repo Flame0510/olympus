@@ -312,7 +312,6 @@ export default function ChatClient() {
       return;
     }
     fetch(`/api/chat/history?sessionKey=${encodeURIComponent(selectedSessionKey)}&limit=100`)
-      .then(r => r.json())
       .then(r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
