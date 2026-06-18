@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useChatHTTP } from './useChatHTTP';
+import type { ChatMessage as WSChatMessage } from './useChatHTTP';
 import ModelPickerModal from '../components/ModelPickerModal';
 
 const USER_ID = 'web';
@@ -16,7 +18,7 @@ interface ChatMessage {
   id?: number;
   ts: number;
   user_id: string;
-  role: 'user' | 'agent';
+  role: 'user' | 'assistant' | 'agent' | 'system';
   content: string;
   model?: string;
   openclaw_session_id?: string;
@@ -96,6 +98,12 @@ const EMOJI_MAP: Record<string, string> = {
 
 const AGENT_EMOJI: Record<string, string> = { ops: '👁️', main: '🤖' };
 const AGENT_NAMES: Record<string, string> = { ops: 'Argus', main: 'Main' };
+
+function formatNumber(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return n.toString();
+}
 
 function resolveEmoji(emojiStr: string | undefined, fallback: string): string {
   if (!emojiStr) return fallback;
@@ -210,15 +218,23 @@ export default function ChatClient() {
   const [conversations, setConversations] = useState<Record<string, AgentConversation>>({});
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [tick, setTick] = useState(0);
+  const [showDebug, setShowDebug] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pastedFiles, setPastedFiles] = useState<{ name: string; dataUrl: string }[]>([]);
   const [sessions, setSessions] = useState<ChatSessionInfo[]>([]);
+  const [currentSessionInfo, setCurrentSessionInfo] = useState<ChatSessionInfo | null>(null);
   const [selectedSessionKey, setSelectedSessionKey] = useState<string | null>(null);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   // selectedSessionId replaced by selectedSessionKey
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [currentTool, setCurrentTool] = useState<{ toolName: string; status: string } | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
+
+  const gateway = useChatHTTP();
 
   const copyText = useCallback((text: string, id: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -230,7 +246,6 @@ export default function ChatClient() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
 
   // Add class to body for Pythia button positioning
@@ -277,29 +292,21 @@ export default function ChatClient() {
   async function deleteSession(sessionKey: string, label: string) {
     if (!confirm(`Eliminare la conversazione "${label}"?`)) return;
     try {
-      const res = await fetch('/api/chat/delete-session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionKey }),
-      });
-      if (!res.ok) throw new Error('delete failed');
+      await gateway.deleteSession(sessionKey);
       if (selectedSessionKey === sessionKey) {
         setSelectedSessionKey(null);
         setConversations((prev) => ({ ...prev, [selectedAgent]: { agentId: selectedAgent, messages: [], sessionId: '' } }));
       }
-      // Refresh sessions after delete
-      fetchSessions();
+      // Refresh sessions handled by onSessionUpdate or manual fetch if needed
     } catch (e: unknown) {
       console.error('delete session error:', e);
     }
   }
 
   const fetchSessions = useCallback(() => {
-    if (!selectedAgent) return;
-    fetch(`/api/chat/sessions?agentId=${selectedAgent}&limit=50`)
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data)) setSessions(data); })
-      .catch(e => console.error('fetchSessions error:', e));
+    // Sessions are now pushed via gateway.onSessionUpdate
+  // No HTTP fetch needed — the WebSocket provides session list updates
+  if (!selectedAgent) return;
   }, [selectedAgent]);
 
   // Load sessions list
@@ -313,23 +320,19 @@ export default function ChatClient() {
       setConversations(prev => ({ ...prev, [selectedAgent]: { agentId: selectedAgent, messages: [], sessionId: '' } }));
       return;
     }
-    fetch(`/api/chat/history?sessionKey=${encodeURIComponent(selectedSessionKey)}&limit=100`)
-      .then(r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then((data: any) => {
+    gateway.fetchHistory(selectedSessionKey)
+      .then((data: WSChatMessage[]) => {
         let messages: ChatMessage[] = [];
         if (Array.isArray(data)) {
           // Show only the last 40 messages to prevent rendering freeze
           const recent = data.slice(-40);
-          messages = recent.map((m: any, i: number) => {
-            const role = m.role === 'assistant' ? 'agent' : (m.role === 'user' ? 'user' : 'user');
+          messages = recent.map((m: WSChatMessage, i: number) => {
+            const role = m.role === 'assistant' || m.role === 'agent' || m.role === 'system' ? m.role : 'user';
             return {
               id: i,
-              ts: m.ts || m.timestamp || Date.now(),
-              user_id: role === 'user' ? USER_ID : selectedAgent,
-              role,
+              ts: m.ts || Date.now(),
+              user_id: role === 'user' ? USER_ID : (m.user_id || selectedAgent),
+              role: role as ChatMessage['role'],
               content: extractTextContent(m.content),
               model: m.model || '',
               openclaw_session_id: selectedSessionKey,
@@ -350,14 +353,78 @@ export default function ChatClient() {
         }));
       })
       .catch(e => console.error('fetchHistory error:', e, 'sessionKey:', selectedSessionKey));
-  }, [selectedAgent, selectedSessionKey]);
+  }, [selectedAgent, selectedSessionKey, gateway]);
+
+  // Setup dei callback per gateway WS
+  useEffect(() => {
+    const selectedAgentRef = selectedAgent;
+    gateway.onDelta = (data) => {
+      console.log("[onDelta] text:", data.text?.substring(0,40));
+      setConversations(prev => {
+        const c = prev[selectedAgentRef];
+        if (!c) {
+          console.warn('[ChatClient] onDelta: nessuna conversazione per', selectedAgent);
+          return prev;
+        }
+        const msgs = [...c.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && (last.role === 'agent' || last.role === 'assistant')) {
+          msgs[msgs.length - 1] = { ...last, content: last.content + data.text };
+        } else {
+          msgs.push({ ts: Date.now(), user_id: 'agent', role: 'agent', content: data.text });
+        }
+        return { ...prev, [selectedAgentRef]: { ...c, messages: msgs } };
+      });
+      // Forza re-render
+      setTick(t => t + 1);
+    };
+    gateway.onRunComplete = (sessionKey) => {
+      console.log("[onRunComplete] key:", sessionKey);
+      setStreaming(false);
+      fetchSessions();
+      // Forza ricarica conversazione dopo 2 secondi
+      // Cambia selectedAgentRef a se stesso per triggerare refresh messaggi
+      setTick(t => t + 10);
+    };
+    gateway.onToolProgress = (data) => {
+      setCurrentTool(data);
+    };
+    gateway.onSessionUpdate = (sessions) => {
+      setSessions(sessions);
+    };
+    // Refresh forzato messaggi dopo onRunComplete
+    if (tick >= 10) {
+      setConversations(prev => {
+        const c = prev[selectedAgentRef];
+        if (c && c.messages.length > 0) {
+          // Forza re-render clonando l'array
+          return { ...prev, [selectedAgentRef]: { ...c, messages: [...c.messages] } };
+        }
+        return prev;
+      });
+      setTick(0);
+    }
+    gateway.onError = (sessionKey, error) => {
+      setStreaming(false);
+      setConversations(prev => {
+        const c = prev[selectedAgent];
+        if (!c) return prev;
+        const msgs = [...c.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && (last.role === 'agent' || last.role === 'assistant')) {
+          msgs[msgs.length - 1] = { ...last, content: last.content + `\n\nError: ${error}` };
+        }
+        return { ...prev, [selectedAgent]: { ...c, messages: msgs } };
+      });
+    };
+  }, [selectedAgent, gateway, fetchSessions, tick]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const newSession = useCallback(() => {
-    if (abortRef.current) abortRef.current.abort();
+    gateway.abortRun(conversations[selectedAgent]?.sessionId || '');
     setConversations(prev => ({
       ...prev,
       [selectedAgent]: { agentId: selectedAgent, messages: [], sessionId: 'new' },
@@ -367,24 +434,28 @@ export default function ChatClient() {
     setStreaming(false);
     setPastedFiles([]);
     inputRef.current?.focus();
-  }, [selectedAgent]);
+  }, [selectedAgent, conversations, gateway]);
 
   const loadSession = useCallback(async (sessionKey: string) => {
-    if (abortRef.current) abortRef.current.abort();
+    gateway.abortRun(conversations[selectedAgent]?.sessionId || '');
     setStreaming(false);
     setSelectedSessionKey(sessionKey);
     setSidebarOpen(false);
+    // Find session info for token display
+    const found = sessions.find(s => s.key === sessionKey);
+    if (found) setCurrentSessionInfo(found);
+    else setCurrentSessionInfo(null);
     // History loading is handled by the useEffect on selectedSessionKey
-  }, [selectedAgent]);
+  }, [selectedAgent, sessions, conversations, gateway]);
 
   const switchAgent = useCallback((agentId: string) => {
-    if (abortRef.current) abortRef.current.abort();
+    gateway.abortRun(conversations[selectedAgent]?.sessionId || '');
     setStreaming(false);
     setPastedFiles([]);
     setSelectedAgent(agentId);
     setSelectedSessionKey(null);
     setSidebarOpen(false);
-  }, []);
+  }, [selectedAgent, conversations, gateway]);
 
   // ---- FILE / IMAGE HANDLING ----
 
@@ -455,12 +526,11 @@ export default function ChatClient() {
   const send = useCallback(async () => {
     const text = input.trim();
     const hasFiles = pastedFiles.length > 0;
-    if ((!text && !hasFiles) || streaming) return;
+    if (((!text && !hasFiles) || streaming) || !gateway.connected) return;
 
     setInput('');
     setStreaming(true);
 
-    // Se sessionKey è 'new', passiamo vuoto per far generare un sessionKey fresco.
     const currentSessionKey = conversations[selectedAgent]?.sessionId;
     const sendSessionKey = currentSessionKey && currentSessionKey !== 'new' ? currentSessionKey : '';
     const conv = conversations[selectedAgent] || {
@@ -469,18 +539,11 @@ export default function ChatClient() {
       sessionId: sendSessionKey,
     };
 
-    // Build content string: text + file references
     let content = text;
     const fileRefs = pastedFiles.map(f => `[${f.name}]`).join(' ');
     if (hasFiles) {
       content = (text ? text + '\n' : '') + (pastedFiles.length > 0 ? fileRefs : '');
     }
-
-    // Prepara files per invio
-    const filesPayload = pastedFiles.map(f => ({
-      name: f.name,
-      dataUrl: f.dataUrl.length < 5_000_000 ? f.dataUrl : `[file: ${f.name} - troppo grande >5MB]`,
-    }));
 
     const userMsg: ChatMessage = { ts: Date.now(), user_id: USER_ID, role: 'user', content };
     const agentPlaceholder: ChatMessage = { ts: Date.now() + 1, user_id: USER_ID, role: 'agent', content: '' };
@@ -490,83 +553,28 @@ export default function ChatClient() {
       [selectedAgent]: { ...conv, messages: [...conv.messages, userMsg, agentPlaceholder] },
     }));
     setPastedFiles([]);
-
-    abortRef.current = new AbortController();
+    setLoadingMessage('');
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, agentId: selectedAgent, sessionKey: sendSessionKey, model: selectedModel || undefined }),
-        signal: abortRef.current.signal,
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        setConversations(prev => {
-          const c = prev[selectedAgent];
-          if (!c) return prev;
-          const msgs = c.messages.slice(0, -1);
-          msgs.push({ ts: Date.now(), user_id: USER_ID, role: 'agent', content: `Error: ${err}` });
-          return { ...prev, [selectedAgent]: { ...c, messages: msgs } };
-        });
-        return;
-      }
-
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = '';
-      let sessionKeyReceived = false;
-      if (!reader) return;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        for (const line of chunk.split('\n')) {
-          if (!line.startsWith('data:')) continue;
-          const data = line.slice(5).trim();
-          if (data === '[DONE]') continue;
-          try {
-            const json = JSON.parse(data);
-            // Primo chunk: potrebbe contenere il sessionKey
-            if (!sessionKeyReceived && json.sessionKey) {
-              sessionKeyReceived = true;
-              setConversations(prev => ({
-                ...prev,
-                [selectedAgent]: { ...prev[selectedAgent]!, sessionId: json.sessionKey },
-              }));
-              continue;
-            }
-            const delta = json?.choices?.[0]?.delta?.content ?? '';
-            if (delta) {
-              accumulated += delta;
-              // Dopo il primo chunk di testo, segna sessionKey come ricevuto se non lo era
-              if (!sessionKeyReceived) sessionKeyReceived = true;
-              setConversations(prev => {
-                const c = prev[selectedAgent];
-                if (!c) return prev;
-                return { ...prev, [selectedAgent]: { ...c, messages: [...c.messages.slice(0, -1), { ts: Date.now(), user_id: USER_ID, role: 'agent', content: accumulated }] } };
-              });
-            }
-          } catch {}
-        }
+      const sessionKey = await gateway.sendMessage(sendSessionKey, content, selectedAgent);
+      if (!sendSessionKey && sessionKey) {
+        setSelectedSessionKey(sessionKey);
+        setConversations(prev => ({
+          ...prev,
+          [selectedAgent]: { ...prev[selectedAgent]!, sessionId: sessionKey },
+        }));
       }
     } catch (err: unknown) {
-      if ((err as Error)?.name !== 'AbortError') {
-        setConversations(prev => {
-          const c = prev[selectedAgent];
-          if (!c) return prev;
-          const msgs = c.messages.slice(0, -1);
-          msgs.push({ ts: Date.now(), user_id: USER_ID, role: 'agent', content: 'Connection error.' });
-          return { ...prev, [selectedAgent]: { ...c, messages: msgs } };
-        });
-      }
-    } finally {
+      setConversations(prev => {
+        const c = prev[selectedAgent];
+        if (!c) return prev;
+        const msgs = c.messages.slice(0, -1);
+        msgs.push({ ts: Date.now(), user_id: USER_ID, role: 'agent', content: `Error: ${(err as Error).message}` });
+        return { ...prev, [selectedAgent]: { ...c, messages: msgs } };
+      });
       setStreaming(false);
-      abortRef.current = null;
     }
-  }, [input, streaming, selectedAgent, conversations, pastedFiles]);
+  }, [input, streaming, selectedAgent, conversations, pastedFiles, gateway]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -724,6 +732,36 @@ export default function ChatClient() {
       </aside>
 
       {sidebarOpen && <div className="chat-layout__overlay" onClick={() => setSidebarOpen(false)} />}
+      {showDebug && (
+        <div style={{
+          position: 'fixed', top: 0, right: 0, width: 350, height: '100vh',
+          background: '#111', color: '#0f0', fontSize: 11, fontFamily: 'monospace',
+          padding: 10, overflow: 'auto', zIndex: 9999, whiteSpace: 'pre-wrap'
+        }}>
+          <button onClick={() => setShowDebug(false)} style={{
+            position: 'absolute', top: 5, right: 5, background: '#333',
+            color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer'
+          }}>X</button>
+          <div><strong>selectedAgent:</strong> {selectedAgent}</div>
+          <div><strong>streaming:</strong> {String(streaming)}</div>
+          <div><strong>connected:</strong> {String(gateway.connected)}</div>
+          <div><strong>messages.length:</strong> {messages.length}</div>
+          <div><strong>sessions.length:</strong> {sessions.length}</div>
+          <div><strong>tick:</strong> {tick}</div>
+          <div style={{marginTop:8}}><strong>messages[]:</strong></div>
+          {messages.map((m,i) => (
+            <div key={i} style={{borderBottom:'1px solid #333',padding:'4px 0'}}>
+              [{m.role}] {m.content.substring(0,100)}
+            </div>
+          ))}
+          {messages.length === 0 && <div style={{color:'#f55'}}>VUOTO</div>}
+          <div style={{marginTop:8}}><strong>conversations keys:</strong> {Object.keys(conversations).join(', ')}</div>
+          <div><strong>conv[selected]:</strong> {conversations[selectedAgent] ? 'esiste' : 'NON ESISTE'}</div>
+          {conversations[selectedAgent] && (
+            <div>msg in conv: {conversations[selectedAgent].messages.length}</div>
+          )}
+        </div>
+      )}
 
       {/* Main */}
       <div className="chat-layout__main">
@@ -732,7 +770,27 @@ export default function ChatClient() {
           <span className="chat-layout__header-emoji">{currentAgent?.emoji || '🤖'}</span>
           <div className="chat-layout__header-info">
             <span className="chat-layout__header-name">{currentAgent?.name || selectedAgent}</span>
-            <span className="chat-layout__header-model">{selectedModel || currentAgent?.model || 'default'}{streaming && <span className="chat-layout__typing"> scrivendo...</span>}</span>
+            <span className="chat-layout__header-model">
+              {selectedModel || currentAgent?.model || 'default'}
+              {currentSessionInfo && (currentSessionInfo.inputTokens ?? 0) > 0 && (
+                <span className="chat-layout__header-tokens">
+                  {' · '}in {formatNumber(currentSessionInfo.inputTokens ?? 0)} · out {formatNumber(currentSessionInfo.outputTokens ?? 0)}
+                </span>
+              )}
+              {streaming && (
+                <div className="chat-layout__typing-container">
+                  <span className="chat-layout__typing"> scrivendo...</span>
+                  {currentTool && (
+                    <span className="chat-layout__tool-badge">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginRight: 4}}>
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                      </svg>
+                      {currentTool.toolName} ({currentTool.status})
+                    </span>
+                  )}
+                </div>
+              )}
+            </span>
           </div>
           <div className="chat-layout__header-actions">
             <div className="chat-layout__model-selector">
@@ -746,6 +804,12 @@ export default function ChatClient() {
             {messages.length > 0 && (
               <span className="chat-layout__msg-count">{messages.length}</span>
             )}
+            <button onClick={() => setShowDebug(v => !v)} style={{
+              background: 'none', border: '1px solid #555', color: '#888',
+              fontSize: 10, padding: '2px 6px', borderRadius: 4, cursor: 'pointer'
+            }} title="Debug stato chat">
+              🐛
+            </button>
             <button className="chat-layout__new-btn" onClick={newSession} title="Nuova chat">
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <path d="M2 8h12M8 2v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -878,7 +942,7 @@ export default function ChatClient() {
         body.olympus-chat-page .ochat__panel {
           bottom: 134px !important;
         }
-        @media (max-width: 768px) {
+        @media (max-width: calc(var(--bp-md) - 1px)) {
           body.olympus-chat-page .ochat__trigger,
           .chat-layout + .ochat__trigger,
           .chat-layout .ochat__trigger {
@@ -1012,7 +1076,19 @@ export default function ChatClient() {
           white-space: nowrap;
         }
         .chat-layout__header-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .chat-layout__typing-container { display: flex; align-items: center; gap: 8px; }
         .chat-layout__typing { color: var(--copper); font-style: italic; }
+        .chat-layout__tool-badge {
+          font-size: 9px;
+          background: var(--bg3);
+          border: 1px solid var(--border);
+          padding: 1px 6px;
+          border-radius: 10px;
+          color: var(--copper);
+          display: flex;
+          align-items: center;
+        }
+        .chat-layout__header-tokens { font-size: 9px; opacity: 0.6; }
         .chat-layout__msg-count { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
         .chat-layout__typing { color: var(--copper); animation: pulse 1s ease-in-out infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
@@ -1175,7 +1251,7 @@ export default function ChatClient() {
         .chat-layout__send-btn:not(:disabled):hover { opacity: 0.85; }
 
         /* Responsive */
-        @media (max-width: 768px) {
+        @media (max-width: calc(var(--bp-md) - 1px)) {
           .chat-layout {
             height: 100svh;
             max-height: 100svh;
@@ -1196,7 +1272,7 @@ export default function ChatClient() {
           .chat-layout__msg { max-width: 90%; }
         }
 
-        @media (min-width: 769px) and (max-width: 1024px) {
+        @media (min-width: var(--bp-sm)) and (max-width: 1024px) {
           .chat-layout__hamburger { display: block; }
           .chat-layout__header { padding-left: 48px; }
           .chat-layout__sidebar {
@@ -1211,7 +1287,7 @@ export default function ChatClient() {
           }
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: calc(var(--bp-sm) - 1px)) {
           .chat-layout__header { padding: 6px 10px 6px 48px; }
           .chat-layout__messages { padding: 8px; gap: 6px; }
           .chat-layout__footer { padding: 6px 10px; }

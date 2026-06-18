@@ -54,16 +54,6 @@ const navItems = [
     ),
   },
   {
-    label: 'Chat',
-    path: '/chat',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-        <path d="M2 3h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6l-4 2V4a1 1 0 0 1 1-1z"/>
-        <path d="M6 7h6M6 10h4"/>
-      </svg>
-    ),
-  },
-  {
     label: 'Plugins',
     path: '/plugins',
     icon: (
