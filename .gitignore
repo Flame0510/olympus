@@ -11,3 +11,8 @@ node_modules/
 *.db-shm
 *.db-wal
 .openclaw/
+app/api/ws/
+app/chat/useChatGatewayWS.ts
+server/
+backups/
+app/api/chat/
