@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useResponsive } from '../design-system';
 import type { Costs } from '@/lib/types';
 import { useDashboard } from '@/lib/hooks/useDashboard';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
@@ -23,15 +24,8 @@ export default function DashboardLayout({ initialCosts }: DashboardLayoutProps) 
     hasCostLoaded,
   } = useDashboard({ initialCosts });
 
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('md');
   const { loading: screenshotLoading, takeScreenshot } = useScreenshot();
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   return (
     <main className="shell">

@@ -2,6 +2,7 @@
 // Replaces AgentDrawer.jsx — uses OlympusApiClient (Facade) instead of raw fetch
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useResponsive } from '../design-system';
 import type { SessionDetail } from '@/lib/types';
 import { OlympusApiClient } from '@/lib/patterns/ApiClient';
 import { deriveSessionDisplayLabel } from '@/lib/patterns/sessionPresentation';
@@ -25,7 +26,7 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<SessionDetail | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('md');
 
   // ── Drag-to-close per bottom sheet mobile ─────────────────────────────
   const dragStartY = useRef<number | null>(null);
@@ -54,13 +55,6 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
     }
     dragStartY.current = null;
   };
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
 
   useEffect(() => {
     if (!sessionId) {

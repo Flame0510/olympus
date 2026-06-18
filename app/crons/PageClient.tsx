@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useResponsive } from '../design-system';
 import { Pill } from '../components/ui';
 import type { Tone } from '../components/ui';
 import { apiFetch } from '@/lib/apiFetch';
@@ -148,7 +149,7 @@ export default function CronsPage() {
   const [sessions, setSessions] = useState<CronSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('lg');
   const [tab, setTab] = useState<'jobs' | 'runs'>('jobs');
   const timezone = useOlympusTimezone();
 
@@ -193,13 +194,6 @@ export default function CronsPage() {
     void load();
     const t = setInterval(() => void load(), 15_000);
     return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   return (

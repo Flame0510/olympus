@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useResponsive } from '../design-system';
 import type { CSSProperties } from 'react';
 import type { Costs } from '@/lib/types';
 import { useDashboard } from '@/lib/hooks/useDashboard';
@@ -31,16 +32,9 @@ export default function LineageGraphPage({ initialCosts }: LineageGraphPageProps
   } = useDashboard({ initialCosts });
 
   const topologyRef = useRef<SessionTopologyHandle>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('md');
   const { loading: screenshotLoading, takeScreenshot } = useScreenshot();
   const [mobileTab, setMobileTab] = useState<'graph' | 'feed' | 'costs'>('graph');
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const resetButtonStyle: CSSProperties = isMobile
     ? { width: '100%', justifyContent: 'center', minHeight: 38 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useResponsive } from '../design-system';
 
 type BadgeColor = 'green' | 'red' | 'gray' | 'copper' | 'blue';
 
@@ -99,14 +100,7 @@ export function PluginsTab() {
   const [filter, setFilter] = useState('all');
   const [toggling, setToggling] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+  const isMobile = useResponsive('lg');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -351,16 +345,9 @@ export function SkillsTab() {
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('lg');
   const [mobileStep, setMobileStep] = useState(1);
   const [loadingContent, setLoadingContent] = useState(false);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth < 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

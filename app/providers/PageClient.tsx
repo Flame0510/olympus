@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useResponsive } from '../design-system';
 import { Pill, Surface, toneVars } from '../components/ui';
 import type { Tone } from '../components/ui';
 import { useOlympusTimezone } from '@/lib/hooks/useOlympusTimezone';
@@ -236,7 +237,7 @@ export default function ProvidersPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedProvider, setSelectedProvider] = useState('');
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('md');
   const [tab, setTab] = useState<'providers' | 'details'>('providers');
   const [usageData, setUsageData] = useState<ProviderUsageData | null>(null);
   const [usageLoaded, setUsageLoaded] = useState(false);
@@ -286,13 +287,6 @@ export default function ProvidersPage() {
     void loadUsage();
     const t = setInterval(() => void loadUsage(), 30_000);
     return () => clearInterval(t);
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   const oauthByProvider = new Map<string, OAuthProvider>(

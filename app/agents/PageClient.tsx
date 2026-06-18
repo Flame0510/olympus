@@ -6,6 +6,7 @@ import { SkeletonLines } from '../components/Skeleton';
 import { Pill, Surface } from '../components/ui';
 import ModelPickerModal from '../components/ModelPickerModal';
 import { apiFetch } from '@/lib/apiFetch';
+import { useResponsive } from '../design-system';
 
 const API_FETCH_OPTIONS: RequestInit = {
   cache: 'no-store',
@@ -151,6 +152,95 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
     defaults: { id: 'atlas', name: 'Atlas', label: 'Atlas Dev', model: 'openai-codex/gpt-5.4-mini', workspace: '/data/.openclaw/workspace-atlas', identity: { name: 'Atlas', emoji: '🌐' } },
   },
 ];
+
+function PdfPreview({ path }: { path: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    let cancelled = false;
+    let currentTask: { destroy?: () => void } | null = null;
+
+    async function ensurePdfJs() {
+      if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
+      await new Promise<void>((resolve, reject) => {
+        const existing = document.querySelector('script[data-pdfjs="1"]') as HTMLScriptElement | null;
+        if (existing) {
+          existing.addEventListener('load', () => resolve(), { once: true });
+          existing.addEventListener('error', () => reject(new Error('pdfjs load failed')), { once: true });
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        script.async = true;
+        script.dataset.pdfjs = '1';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('pdfjs load failed'));
+        document.head.appendChild(script);
+      });
+      const lib = (window as any).pdfjsLib;
+      if (!lib) throw new Error('pdfjs missing');
+      lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      return lib;
+    }
+
+    async function render() {
+      setStatus('loading');
+      const container = containerRef.current;
+      if (!container) return;
+      container.innerHTML = '';
+      try {
+        const pdfjsLib = await ensurePdfJs();
+        const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, { credentials: 'include' });
+        if (!res.ok) throw new Error('pdf fetch failed');
+        const bytes = await res.arrayBuffer();
+        if (cancelled) return;
+        const task = pdfjsLib.getDocument({ data: bytes });
+        currentTask = task;
+        const pdf = await task.promise;
+        const width = Math.max(320, container.clientWidth || 320) - 24;
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {
+          if (cancelled) return;
+          const page = await pdf.getPage(pageNum);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = width / baseViewport.width;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          if (!context) continue;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          canvas.style.display = 'block';
+          canvas.style.margin = '0 auto 12px';
+          canvas.style.background = '#fff';
+          canvas.style.borderRadius = '6px';
+          await page.render({ canvasContext: context, viewport }).promise;
+          if (cancelled) return;
+          container.appendChild(canvas);
+        }
+        if (!cancelled) setStatus('ready');
+      } catch {
+        if (!cancelled) setStatus('error');
+      }
+    }
+
+    void render();
+    return () => {
+      cancelled = true;
+      if (currentTask?.destroy) currentTask.destroy();
+    };
+  }, [path]);
+
+  return (
+    <div style={{ flex: 1, overflow: 'auto', background: '#2f3136', padding: 12 }}>
+      {status === 'loading' && <div style={{ color: '#bbb', fontSize: 12, textAlign: 'center', padding: 24 }}>Caricamento PDF…</div>}
+      {status === 'error' && <div style={{ color: '#f59e0b', fontSize: 12, textAlign: 'center', padding: 24 }}>Preview PDF non disponibile su questo browser.</div>}
+      <div ref={containerRef} />
+    </div>
+  );
+}
 
 function fileKind(filePath: string): string {
   const p = (filePath ?? '').toLowerCase();
@@ -385,7 +475,7 @@ export default function AgentsPage() {
   const [configError, setConfigError] = useState('');
   const [loadingFile, setLoadingFile] = useState(false);
   const [agentsLoaded, setAgentsLoaded] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useResponsive('lg'); // < 992px for fold/tablet
   const [editableConfig, setEditableConfig] = useState<EditableAgentConfig | null>(null);
   const [editableAccounts, setEditableAccounts] = useState<EditableTelegramAccount[]>([]);
   const [editableBindings, setEditableBindings] = useState<EditableTelegramBinding[]>([]);
@@ -402,6 +492,10 @@ export default function AgentsPage() {
   const isDirtyRef = useRef(false);
   const savingStateRef = useRef<SaveState>('idle');
   const loadingFileRef = useRef(false);
+  const fetchGenRef = useRef(0);
+  const loadFileGenRef = useRef(0);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const loadFileAbortRef = useRef<AbortController | null>(null);
 
   const toggleDir = (dirName: string) => setOpenDirs((prev) => ({ ...prev, [dirName]: !prev[dirName] }));
 
@@ -460,14 +554,21 @@ export default function AgentsPage() {
   useEffect(() => { loadingFileRef.current = loadingFile; }, [loadingFile]);
 
   async function fetchAgents() {
+    const gen = ++fetchGenRef.current;
+    fetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    fetchAbortRef.current = ac;
+    const opts = { ...API_FETCH_OPTIONS, signal: ac.signal };
     try {
       const [agentsRes, channelsRes] = await Promise.all([
-        apiFetch('/api/agents-active', API_FETCH_OPTIONS),
-        apiFetch('/api/agents-config', API_FETCH_OPTIONS),
+        apiFetch('/api/agents-active', opts),
+        apiFetch('/api/agents-config', opts),
       ]);
+      if (gen !== fetchGenRef.current) return;
       if (!agentsRes.ok || !channelsRes.ok) return;
       const agentData = (await agentsRes.json()) as Agent[];
       const channelData = (await channelsRes.json()) as AgentChannelSummary[];
+      if (gen !== fetchGenRef.current) return;
       const nextAgents = Array.isArray(agentData) ? agentData : [];
       const nextChannels = Array.isArray(channelData) ? Object.fromEntries(channelData.map((item) => [item.agentId, item])) : {};
       setAgents(nextAgents);
@@ -478,13 +579,17 @@ export default function AgentsPage() {
       }
       setLastRefreshAt(Date.now());
       setAgentsLoaded(true);
-    } catch {
-      setAgentsLoaded(true);
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') setAgentsLoaded(true);
     }
   }
 
   async function loadFile(path: string, options?: { preserveSelection?: boolean; silent?: boolean }) {
     if (!path) return;
+    const gen = ++loadFileGenRef.current;
+    loadFileAbortRef.current?.abort();
+    const ac = new AbortController();
+    loadFileAbortRef.current = ac;
     const preserveSelection = options?.preserveSelection ?? false;
     const silent = options?.silent ?? false;
     if (!silent) setLoadingFile(true);
@@ -496,29 +601,36 @@ export default function AgentsPage() {
     const isBinary = /\.(png|jpg|jpeg|gif|webp|pdf|ico)$/i.test(path);
     setFileType(isBinary ? 'binary' : 'text');
     try {
+      if (gen !== loadFileGenRef.current) return;
       if (isBinary) {
-        const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, { credentials: 'include' });
+        const res = await fetch(`/api/workspace?path=${encodeURIComponent(path)}`, { signal: ac.signal, credentials: 'include' });
+        if (gen !== loadFileGenRef.current) return;
         if (!res.ok) throw new Error('load failed');
         const blob = await res.blob();
+        if (gen !== loadFileGenRef.current) return;
         const url = URL.createObjectURL(blob);
         setBinaryUrl(url);
         setEditorContent('');
       } else {
-        const res = await apiFetch(`/api/workspace?path=${encodeURIComponent(path)}`, API_FETCH_OPTIONS);
+        const res = await apiFetch(`/api/workspace?path=${encodeURIComponent(path)}`, { ...API_FETCH_OPTIONS, signal: ac.signal });
+        if (gen !== loadFileGenRef.current) return;
         if (!res.ok) throw new Error('load failed');
         const data = (await res.json()) as { content?: string };
+        if (gen !== loadFileGenRef.current) return;
         setEditorContent(data.content ?? '');
       }
+      if (gen !== loadFileGenRef.current) return;
       setLastRefreshAt(Date.now());
       setMobileStep(3);
       if (!preserveSelection) setIsDirty(false);
       setRemoteUpdateAvailable(false);
-    } catch {
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return;
       if (!preserveSelection) setEditorContent('');
       setBinaryUrl('');
       setSavingState('error');
     } finally {
-      if (!silent) setLoadingFile(false);
+      if (!silent && loadFileGenRef.current === gen) setLoadingFile(false);
     }
   }
 
@@ -724,7 +836,10 @@ export default function AgentsPage() {
   useEffect(() => {
     void fetchAgents();
     const id = setInterval(() => void fetchAgents(), 30000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      fetchAbortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -776,24 +891,22 @@ export default function AgentsPage() {
       setLiveMode('polling');
     };
 
-    return () => source.close();
+    return () => {
+      source.close();
+      fetchAbortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
     if (liveMode === 'sse') return;
     if (!selectedFilePath || isDirty || savingState === 'saving' || loadingFile) return;
+    const myPath = selectedFilePath;
     const id = setInterval(() => {
-      void loadFile(selectedFilePath, { preserveSelection: true, silent: true });
+      if (selectedFilePathRef.current !== myPath) return;
+      void loadFile(myPath, { preserveSelection: true, silent: true });
     }, 8000);
     return () => clearInterval(id);
   }, [selectedFilePath, isDirty, savingState, loadingFile, liveMode]);
-
-  useEffect(() => {
-    const onResize = () => setIsMobile(window.innerWidth <= 900);
-    onResize();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
 
   useEffect(() => {
     setEditableConfig(cloneAgentConfig(selectedAgentChannel?.config));
@@ -802,6 +915,15 @@ export default function AgentsPage() {
     setConfigSavingState('idle');
     setConfigError('');
   }, [selectedAgentChannel, selectedAgentId]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileStep(1);
+      return;
+    }
+    if (!selectedAgentId) setMobileStep(1);
+    else if (!selectedFilePath && mobileStep === 3) setMobileStep(2);
+  }, [isMobile, selectedAgentId, selectedFilePath, mobileStep]);
 
   const modelValueToString = (value: AgentConfigRecord['model'] | undefined): string => {
     if (!value) return '';
@@ -887,7 +1009,7 @@ export default function AgentsPage() {
             const telegramBindings = channelSummary?.telegram.bindings ?? [];
             const primaryAccount = telegramAccounts[0];
             return (
-              <button key={agent.agent_id} onClick={() => { setSelectedAgentId(agent.agent_id); selectedAgentIdRef.current = agent.agent_id; setSelectedFilePath(''); setEditorContent(''); setIsDirty(false); setMobileStep(2); }} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
+              <button key={agent.agent_id} onClick={() => { fetchAbortRef.current?.abort(); loadFileAbortRef.current?.abort(); setSelectedAgentId(agent.agent_id); selectedAgentIdRef.current = agent.agent_id; setSelectedFilePath(''); setEditorContent(''); setIsDirty(false); setMobileStep(2); }} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: hasWorking ? '#22c55e' : '#888', display: 'inline-block' }} /><span style={{ color: isActive ? 'var(--copper)' : 'var(--text)', fontSize: 12 }}>{agent.agent_id}</span></div>
                   <span style={{ fontSize: 10, color: '#555' }}>{agent.sessions.length} sess</span>
@@ -1031,7 +1153,7 @@ export default function AgentsPage() {
             const isMarkdown = ext === 'md';
             const isHtml = ext === 'html';
             const canEdit = isMarkdown || isHtml || ['py', 'js', 'ts', 'tsx', 'css', 'json', 'yaml', 'yml', 'sh', 'txt', 'env'].includes(ext);
-            if (isPdf && binaryUrl) return <iframe src={binaryUrl} style={{ flex: 1, width: '100%', border: 'none', background: '#525659' }} title="PDF viewer" />;
+            if (isPdf && selectedFilePath) return <PdfPreview path={selectedFilePath} />;
             if (isImage && binaryUrl) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, overflow: 'auto', background: '#1a1a1a' }}><img src={binaryUrl} alt={selectedFilePath.split('/').pop() ?? ''} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /></div>;
             if (isMarkdown && showPreview && editorContent) {
               return <div className="markdown-preview" dangerouslySetInnerHTML={{ __html: (() => { try { return marked.parse(editorContent, { breaks: true, gfm: true }); } catch { return editorContent; } })() }} style={{ flex: 1, width: '100%', overflow: 'auto', padding: 12, color: '#E8E8E8', fontSize: 14, lineHeight: 1.6 }} />;
