@@ -39,63 +39,76 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#0a0a0a',
-        fontFamily: 'monospace',
+        background: 'radial-gradient(circle at top, rgba(212,155,53,0.12), transparent 32%), var(--bg)',
+        fontFamily: 'var(--font-mono-stack, monospace)',
+        padding: '24px',
       }}
     >
       <div
         style={{
-          background: '#111',
-          border: '1px solid #333',
-          borderRadius: 8,
-          padding: '2rem',
-          width: 'min(92vw, 360px)',
+          width: 'min(92vw, 392px)',
+          background: 'linear-gradient(180deg, rgba(18,18,18,0.98), rgba(12,12,12,0.98))',
+          border: '1px solid var(--border)',
+          borderRadius: 16,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-          👁️ OLYMPUS
+        <div style={{ padding: '22px 24px 18px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <img src="/olympus-logo.png" alt="Olympus" width="76" height="76" style={{ objectFit: 'contain', display: 'block', marginBottom: 14 }} />
+          <div style={{ fontFamily: 'var(--font-serif-stack, serif)', fontSize: 26, letterSpacing: 4, color: 'var(--copper)' }}>OLYMPUS</div>
+          <div style={{ marginTop: 8, color: 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em' }}>
+            AGENCY MONITOR — ACCESSO RISERVATO
+          </div>
         </div>
-        <div style={{ color: '#666', fontSize: 12, marginBottom: 24 }}>
-          Agency Monitor — Accesso riservato
-        </div>
-        <form onSubmit={handleSubmit}>
+
+        <form onSubmit={handleSubmit} style={{ padding: '20px 24px 24px' }}>
+          <div style={{ color: 'var(--copper)', fontSize: 10, letterSpacing: '0.12em', marginBottom: 8 }}>
+            PASSWORD
+          </div>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
+            placeholder="Inserisci la password"
             autoFocus
             style={{
               width: '100%',
-              padding: '0.6rem 0.8rem',
-              background: '#1a1a1a',
-              border: '1px solid #333',
-              borderRadius: 4,
-              color: '#fff',
+              padding: '0.8rem 0.95rem',
+              background: 'var(--bg2)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+              color: 'var(--text)',
               fontSize: 14,
               marginBottom: 12,
               boxSizing: 'border-box',
+              outline: 'none',
             }}
           />
           {error && (
-            <div style={{ color: '#f87171', fontSize: 12, marginBottom: 12 }}>{error}</div>
+            <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 12 }}>{error}</div>
           )}
           <button
             type="submit"
             disabled={loading || !password}
             style={{
               width: '100%',
-              padding: '0.6rem',
-              background: loading ? '#333' : '#2563eb',
-              border: 'none',
-              borderRadius: 4,
-              color: '#fff',
-              fontSize: 14,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              padding: '0.82rem',
+              background: loading || !password ? 'rgba(212,155,53,0.18)' : 'var(--copper)',
+              border: '1px solid transparent',
+              borderRadius: 10,
+              color: '#0b0b0b',
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: loading || !password ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.08em',
             }}
           >
-            {loading ? 'Accesso...' : 'Accedi'}
+            {loading ? 'ACCESSO...' : 'ACCEDI'}
           </button>
+          <div style={{ marginTop: 14, fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', letterSpacing: '0.06em' }}>
+            Accesso interno Olympus
+          </div>
         </form>
       </div>
     </div>

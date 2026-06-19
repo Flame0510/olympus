@@ -942,7 +942,7 @@ export default function ChatClient() {
         body.olympus-chat-page .ochat__panel {
           bottom: 134px !important;
         }
-        @media (max-width: calc(var(--bp-md) - 1px)) {
+        @media (max-width: 767px) {
           body.olympus-chat-page .ochat__trigger,
           .chat-layout + .ochat__trigger,
           .chat-layout .ochat__trigger {
@@ -1179,7 +1179,7 @@ export default function ChatClient() {
         .chat-layout__bubble-text .fmt-code-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; background: var(--bg3); border-bottom: 1px solid var(--border); }
         .chat-layout__bubble-text .fmt-code-lang { font-size: 9px; color: #888; text-transform: uppercase; }
         .chat-layout__bubble-text .fmt-code-copy { background: none; border: none; color: var(--copper); font-size: 9px; cursor: pointer; padding: 2px 6px; border-radius: 3px; font-family: inherit; }
-        .chat-layout__bubble-text .fmt-code-copy:hover { background: rgba(184,115,51,.12); }
+        .chat-layout__bubble-text .fmt-code-copy:hover { background: rgba(212,155,53,.12); }
         .chat-layout__bubble-text .fmt-code-block code { display: block; padding: 8px 10px; font-family: var(--font-mono-stack); font-size: 11px; }
         .chat-layout__bubble-text .fmt-code-block code { font-family: var(--font-mono-stack); font-size: 11px; }
         .chat-layout__bubble-text .fmt-inline-code { background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font-family: var(--font-mono-stack); font-size: 11px; color: var(--copper); }
@@ -1251,7 +1251,7 @@ export default function ChatClient() {
         .chat-layout__send-btn:not(:disabled):hover { opacity: 0.85; }
 
         /* Responsive */
-        @media (max-width: calc(var(--bp-md) - 1px)) {
+        @media (max-width: 767px) {
           .chat-layout {
             height: 100svh;
             max-height: 100svh;
@@ -1272,7 +1272,7 @@ export default function ChatClient() {
           .chat-layout__msg { max-width: 90%; }
         }
 
-        @media (min-width: var(--bp-sm)) and (max-width: 1024px) {
+        @media (min-width: 576px) and (max-width: 1024px) {
           .chat-layout__hamburger { display: block; }
           .chat-layout__header { padding-left: 48px; }
           .chat-layout__sidebar {
@@ -1287,7 +1287,7 @@ export default function ChatClient() {
           }
         }
 
-        @media (max-width: calc(var(--bp-sm) - 1px)) {
+        @media (max-width: 575px) {
           .chat-layout__header { padding: 6px 10px 6px 48px; }
           .chat-layout__messages { padding: 8px; gap: 6px; }
           .chat-layout__footer { padding: 6px 10px; }

@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import { SkeletonLines } from '../components/Skeleton';
 import { Pill, Surface } from '../components/ui';
 import ModelPickerModal from '../components/ModelPickerModal';
+import OlympusLoader from '../components/OlympusLoader';
 import { apiFetch } from '@/lib/apiFetch';
 import { useResponsive } from '../design-system';
 
@@ -235,7 +236,7 @@ function PdfPreview({ path }: { path: string }) {
 
   return (
     <div style={{ flex: 1, overflow: 'auto', background: '#2f3136', padding: 12 }}>
-      {status === 'loading' && <div style={{ color: '#bbb', fontSize: 12, textAlign: 'center', padding: 24 }}>Caricamento PDF…</div>}
+      {status === 'loading' && <OlympusLoader label="LOADING PDF" compact />}
       {status === 'error' && <div style={{ color: '#f59e0b', fontSize: 12, textAlign: 'center', padding: 24 }}>Preview PDF non disponibile su questo browser.</div>}
       <div ref={containerRef} />
     </div>
@@ -934,7 +935,7 @@ export default function AgentsPage() {
   const saveLabel = savingState === 'saving' ? 'Saving...' : savingState === 'saved' ? 'Saved ✓' : savingState === 'error' ? 'Error ✗' : 'SAVE';
   const configSaveLabel = configSavingState === 'saving' ? 'Saving...' : configSavingState === 'saved' ? 'Saved ✓' : configSavingState === 'error' ? 'Error ✗' : 'SAVE CONFIG';
   const typeColor = (type: string) => ({
-    markdown: '#B87333',
+    markdown: '#D49B35',
     json: '#60a5fa',
     html: '#f97316',
     pdf: '#ef4444',
@@ -1146,7 +1147,7 @@ export default function AgentsPage() {
           </div>
                     {(function() {
             if (!selectedFilePath) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 12 }}>Select a file to view or edit</div>;
-            if (loadingFile) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: 12 }}>Caricamento file…</div>;
+            if (loadingFile) return <OlympusLoader label="LOADING FILE" compact />;
             const ext = selectedFilePath.split('.').pop()?.toLowerCase() ?? '';
             const isPdf = ext === 'pdf';
             const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);

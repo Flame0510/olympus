@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useResponsive } from '../design-system';
+import OlympusLoader from '../components/OlympusLoader';
 
 type BadgeColor = 'green' | 'red' | 'gray' | 'copper' | 'blue';
 
@@ -10,7 +11,7 @@ function Badge({ children, color }: { children: React.ReactNode; color: BadgeCol
     green: { background: '#14532d', color: '#22c55e', border: '1px solid #166534' },
     red: { background: '#450a0a', color: '#ef4444', border: '1px solid #7f1d1d' },
     gray: { background: '#18181c', color: '#888', border: '1px solid #222228' },
-    copper: { background: '#1a1208', color: '#B87333', border: '1px solid #7a4d22' },
+    copper: { background: '#1a1208', color: '#D49B35', border: '1px solid #7a4d22' },
     blue: { background: '#0c1a2e', color: '#60a5fa', border: '1px solid #1e3a5f' },
   };
   const s = colors[color] ?? colors.gray;
@@ -36,7 +37,7 @@ function PanelTitle({ children }: { children: React.ReactNode }) {
       padding: '8px 16px',
       fontSize: 10,
       letterSpacing: '2px',
-      color: '#B87333',
+      color: '#D49B35',
       borderBottom: '1px solid #222228',
       background: '#111114',
       textTransform: 'uppercase',
@@ -65,11 +66,7 @@ function ErrorState({ message }: { message: string }) {
 }
 
 function LoadingState() {
-  return (
-    <div style={{ color: '#555', padding: '32px 16px', fontFamily: "'JetBrains Mono', monospace", fontSize: 11, textAlign: 'center' }}>
-      loading…
-    </div>
-  );
+  return <OlympusLoader label="LOADING" compact />;
 }
 
 // ─── Plugins Tab ─────────────────────────────────────────────────────────────
@@ -173,9 +170,9 @@ export function PluginsTab() {
               fontSize: 10,
               padding: '3px 10px',
               border: '1px solid',
-              borderColor: filter === f ? '#B87333' : '#222228',
+              borderColor: filter === f ? '#D49B35' : '#222228',
               background: filter === f ? '#1a1208' : '#18181c',
-              color: filter === f ? '#B87333' : '#888',
+              color: filter === f ? '#D49B35' : '#888',
               borderRadius: 3,
               cursor: 'pointer',
             }}>
@@ -201,7 +198,7 @@ export function PluginsTab() {
                 borderBottom: '1px solid #18181c',
                 cursor: 'pointer',
                 background: selected?.id === p.id ? '#18181c' : 'transparent',
-                borderLeft: selected?.id === p.id ? '2px solid #B87333' : '2px solid transparent',
+                borderLeft: selected?.id === p.id ? '2px solid #D49B35' : '2px solid transparent',
                 transition: 'all 0.1s',
               }}
             >
@@ -293,7 +290,7 @@ export function PluginsTab() {
       {toastMsg && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24,
-          background: '#111114', border: '1px solid #B87333',
+          background: '#111114', border: '1px solid #D49B35',
           color: '#E8E8E8', fontFamily: "'JetBrains Mono', monospace",
           fontSize: 12, padding: '10px 18px', borderRadius: 4,
           zIndex: 1000,
@@ -439,8 +436,8 @@ export function SkillsTab() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {isMobile && (
         <div style={{ display: 'flex', gap: 8, padding: '8px 10px', borderBottom: '1px solid #222228', background: '#111114' }}>
-          <button onClick={() => setMobileStep(1)} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid #222228', background: mobileStep === 1 ? '#18181c' : 'transparent', color: mobileStep === 1 ? '#B87333' : '#888' }}>LIST</button>
-          <button onClick={() => setMobileStep(2)} disabled={!selected} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid #222228', background: mobileStep === 2 ? '#18181c' : 'transparent', color: mobileStep === 2 ? '#B87333' : '#888', opacity: selected ? 1 : 0.5 }}>EDITOR</button>
+          <button onClick={() => setMobileStep(1)} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid #222228', background: mobileStep === 1 ? '#18181c' : 'transparent', color: mobileStep === 1 ? '#D49B35' : '#888' }}>LIST</button>
+          <button onClick={() => setMobileStep(2)} disabled={!selected} style={{ fontSize: 10, padding: '6px 8px', border: '1px solid #222228', background: mobileStep === 2 ? '#18181c' : 'transparent', color: mobileStep === 2 ? '#D49B35' : '#888', opacity: selected ? 1 : 0.5 }}>EDITOR</button>
         </div>
       )}
 
@@ -454,9 +451,9 @@ export function SkillsTab() {
                 fontSize: 10,
                 padding: '3px 8px',
                 border: '1px solid',
-                borderColor: filter === f ? '#B87333' : '#222228',
+                borderColor: filter === f ? '#D49B35' : '#222228',
                 background: filter === f ? '#1a1208' : '#18181c',
-                color: filter === f ? '#B87333' : '#888',
+                color: filter === f ? '#D49B35' : '#888',
                 borderRadius: 3,
                 cursor: 'pointer',
               }}>
@@ -478,7 +475,7 @@ export function SkillsTab() {
                   borderBottom: '1px solid #18181c',
                   cursor: 'pointer',
                   background: selected?.name === s.name && selected?.type === s.type ? '#18181c' : 'transparent',
-                  borderLeft: selected?.name === s.name && selected?.type === s.type ? '2px solid #B87333' : '2px solid transparent',
+                  borderLeft: selected?.name === s.name && selected?.type === s.type ? '2px solid #D49B35' : '2px solid transparent',
                   transition: 'all 0.1s',
                 }}
               >
@@ -524,7 +521,7 @@ export function SkillsTab() {
 
                 <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
                   {!editMode && selected.skillMdPath && ['shared', 'workspace'].includes(selected.type) && (
-                    <button onClick={() => { setEditText(skillContent || ''); setEditMode(true); }} style={btnStyle('#1a1208', '#B87333', '#7a4d22')}>
+                    <button onClick={() => { setEditText(skillContent || ''); setEditMode(true); }} style={btnStyle('#1a1208', '#D49B35', '#7a4d22')}>
                       EDIT SKILL.MD
                     </button>
                   )}
@@ -598,7 +595,7 @@ export function SkillsTab() {
       {toastMsg && (
         <div style={{
           position: 'fixed', bottom: 24, right: 24,
-          background: '#111114', border: '1px solid #B87333',
+          background: '#111114', border: '1px solid #D49B35',
           color: '#E8E8E8', fontFamily: "'JetBrains Mono', monospace",
           fontSize: 12, padding: '10px 18px', borderRadius: 4,
           zIndex: 1000,

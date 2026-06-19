@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { TOOL_CATALOG, TOTAL_TOOL_COUNT, type ToolStatus } from './tools-catalog';
 import { Pill } from '../components/ui';
+import OlympusLoader from '../components/OlympusLoader';
 import type { Tone } from '../components/ui';
 
 const API_FETCH_OPTIONS: RequestInit = {
@@ -158,7 +159,7 @@ export default function ToolsPageClient({ initialAudio = {}, initialTimezone = '
             ))}
           </section>
 
-          {loading && <p style={{ color: 'var(--text-dim)' }}>Loading…</p>}
+          {loading && <OlympusLoader label="LOADING TOOLS" compact />}
 
           {!loading && audio && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>

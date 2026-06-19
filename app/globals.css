@@ -19,7 +19,7 @@
   --color-text-100: #E8E8E8;
   --color-text-400: #888;
   --color-text-500: #4b5563;
-  --color-accent-500: #B87333;
+  --color-accent-500: #D49B35;
   --color-accent-700: #7a4d22;
   --color-success-500: #22c55e;
   --color-danger-500: #ef4444;
@@ -366,7 +366,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
     inset: 0;
   }
 
-  @media (max-width: calc(var(--bp-md) - 1px)) {
+  @media (max-width: 767px) {
     html, body { overflow: hidden; }
     #agent-toolbar, #main, #header .meta > div:nth-child(1) { display: none !important; }
     #header {
@@ -645,7 +645,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
     color: #888;
   }
   .filter-btn.active {
-    background: #B87333;
+    background: #D49B35;
     color: #000;
   }
 
@@ -773,8 +773,8 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .sidebar__nav {
   display: flex;
   flex-direction: column;
-  padding: 8px 0;
-  gap: 2px;
+  padding: 0;
+  gap: 0;
 }
 
 .sidebar__item {
@@ -873,13 +873,17 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .sidebar__close:hover { color: var(--color-text-100); }
 
 /* ── RESPONSIVE ─────────────────────────────────────────────────── */
-@media (max-width: calc(var(--bp-md) - 1px)) {
+@media (max-width: 767px) {
   html, body { height: 100svh; }
   .app-shell { height: 100svh; max-height: 100svh; }
-  .sidebar--desktop { display: none; }
-  .sidebar__hamburger { display: flex; }
-  .sidebar__overlay { display: block; }
-  .app-shell__content { width: 100%; }
+  .sidebar--desktop,
+  .sidebar__hamburger,
+  .sidebar__overlay,
+  .sidebar--mobile { display: none !important; }
+  .app-shell__content {
+    width: 100%;
+    padding-bottom: 54px;
+  }
 }
 
 /* ── DASHBOARD CLIENT CLASSES ──────────────────────────────────── */
@@ -1045,7 +1049,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 
 .empty-state-icon {
   font-size: 32px;
-  color: var(--copper, #c87533);
+  color: var(--copper, #D49B35);
   opacity: 0.25;
   line-height: 1;
   letter-spacing: -1px;
@@ -1143,7 +1147,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .cost-row .k { color: var(--text-dim); font-size: 10px; }
 .cost-row .v { color: var(--copper); font-weight: 700; }
 
-@media (max-width: calc(var(--bp-lg) - 1px)) { .screenshot-btn-desktop { display: none; } }
+@media (max-width: 991px) { .screenshot-btn-desktop { display: none; } }
 
 /* Skeleton loaders */
 .skeleton {
@@ -1198,7 +1202,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .ui-pill.ui-tone--success { border-color: #255b3f; color: #5ee9a0; background: rgba(34,197,94,0.08); }
 .ui-pill.ui-tone--warning { border-color: #7c5a1a; color: #f6c66b; background: rgba(245,158,11,0.08); }
 .ui-pill.ui-tone--danger { border-color: #7f1d1d; color: #fca5a5; background: rgba(239,68,68,0.08); }
-.ui-pill.ui-tone--accent { border-color: var(--copper-dim); color: var(--copper); background: rgba(184,115,51,0.08); }
+.ui-pill.ui-tone--accent { border-color: var(--copper-dim); color: var(--copper); background: rgba(212,155,53,0.08); }
 .ui-pill.ui-tone--info { border-color: rgba(99,102,241,0.28); color: #818cf8; background: rgba(99,102,241,0.12); }
 .ui-tone--info { border-color: rgba(99,102,241,0.28); }
 
@@ -1221,7 +1225,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .cockpit__quick-links { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
 .ui-link { color: var(--copper); text-decoration: none; }
 .ui-link:hover { text-decoration: underline; }
-@media (max-width: calc(var(--bp-lg) - 1px)) {
+@media (max-width: 991px) {
   .cockpit__metrics, .cockpit__main, .cockpit__checks { grid-template-columns: 1fr; }
 }
 
@@ -1397,7 +1401,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .ochat__send:hover:not(:disabled) { background: var(--copper); color: var(--bg); }
 .ochat__send:disabled { opacity: .35; cursor: default; }
 
-@media (max-width: calc(var(--bp-sm) - 1px)) {
+@media (max-width: 575px) {
   .ochat__panel { width: calc(100vw - 32px); right: 16px; }
   .ochat__trigger { right: 16px; bottom: 16px; }
 }
@@ -1407,7 +1411,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
   display: none;
 }
 
-@media (max-width: calc(var(--bp-md) - 1px)) {
+@media (max-width: 767px) {
   .mobile-bottom-nav {
     display: flex;
     position: fixed;
@@ -1435,7 +1439,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
     min-width: max-content;
     height: 100%;
   }
-  @media (min-width: var(--bp-sm)) {
+  @media (min-width: 576px) {
     .mobile-bottom-nav__scroll { justify-content: center; }
   }
 
@@ -1467,7 +1471,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
   }
 
   .mobile-bottom-nav__item--active {
-    color: var(--copper, #B87333);
+    color: var(--copper, #D49B35);
   }
 
   .mobile-bottom-nav__label {
@@ -1484,8 +1488,10 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
   }
 
   /* Padding bottom per non coprire contenuti */
+  .app-shell__content,
   .app-layout {
     padding-bottom: 54px;
+    box-sizing: border-box;
   }
 
   /* Chat button alzato sopra la bottom navbar */

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useResponsive } from '../design-system';
 import { Pill } from '../components/ui';
+import OlympusLoader from '../components/OlympusLoader';
 import type { Tone } from '../components/ui';
 import { apiFetch } from '@/lib/apiFetch';
 import { useOlympusTimezone } from '@/lib/hooks/useOlympusTimezone';
@@ -210,7 +211,7 @@ export default function CronsPage() {
         <span style={{ fontSize: 10, color: '#555' }}>{sessions.length} runs in history</span>
       </div>
 
-      {loading && <div style={{ padding: 20, color: '#555', fontSize: 12 }}>Loading...</div>}
+      {loading && <OlympusLoader label="LOADING CRONS" compact />}
 
       {isMobile && (
         <div style={{ display: 'flex', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--border)', background: 'var(--bg2)' }}>

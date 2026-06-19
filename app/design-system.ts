@@ -32,7 +32,13 @@ export type BreakpointKey = keyof typeof Breakpoint;
  *   const isMobileExtended = useResponsive('lg'); // true at ≤ 992px
  */
 export function useResponsive(bp: BreakpointKey): boolean {
-  const [matches, setMatches] = useState(false);
+  const getInitial = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const key = ((window as any)?.__OLYMPUS_BREAKPOINT_OVERRIDE?.[bp] ?? Breakpoint[bp]) as number;
+    return window.matchMedia(`(max-width: ${key - 1}px)`).matches;
+  };
+
+  const [matches, setMatches] = useState(getInitial);
   const mqlRef = useRef<MediaQueryList | null>(null);
   const key = (typeof window !== 'undefined' ? (window as any)?.__OLYMPUS_BREAKPOINT_OVERRIDE?.[bp] : undefined) ?? Breakpoint[bp];
 

@@ -42,7 +42,7 @@ export default function DashboardHeader({ costs, loading: dataLoading = false, h
   return (
     <header className="header">
       <div className="logo">
-        {!hideLogo && <img src="/favicon.svg" alt="Olympus" />}
+        {!hideLogo && <img src="/olympus-logo.png" alt="Olympus" style={{ width: 22, height: 22, objectFit: 'contain' }} />}
         <span>{title ?? 'OLYMPUS'}</span>
       </div>
       <div className="meta">

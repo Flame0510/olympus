@@ -16,6 +16,7 @@ import {
   statusColor,
   parseEventData,
 } from '@/lib/utils/format';
+import OlympusLoader from './OlympusLoader';
 
 interface SessionDrawerProps {
   sessionId: string | null;
@@ -166,7 +167,7 @@ export default function SessionDrawer({ sessionId, onClose }: SessionDrawerProps
         ✕
       </button>
 
-      {loading && <div>Caricamento...</div>}
+      {loading && <OlympusLoader label="LOADING SESSION" compact />}
       {error && <div style={{ color: '#f07070' }}>{error}</div>}
 
       {!loading && !error && session && (

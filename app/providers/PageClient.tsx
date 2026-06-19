@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useResponsive } from '../design-system';
 import { Pill, Surface, toneVars } from '../components/ui';
+import OlympusLoader from '../components/OlympusLoader';
 import type { Tone } from '../components/ui';
 import { useOlympusTimezone } from '@/lib/hooks/useOlympusTimezone';
 import { formatDateTimeInTimezone } from '@/lib/timezone';
@@ -242,6 +243,9 @@ export default function ProvidersPage() {
   const [usageData, setUsageData] = useState<ProviderUsageData | null>(null);
   const [usageLoaded, setUsageLoaded] = useState(false);
   const [usageError, setUsageError] = useState('');
+  const [aliasForm, setAliasForm] = useState({ name: '', model: '' });
+  const [aliasSaving, setAliasSaving] = useState('');
+  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
   const timezone = useOlympusTimezone();
 
   async function loadUsage() {
@@ -309,9 +313,61 @@ export default function ProvidersPage() {
     ? (data?.allowed ?? []).filter((m) => m.startsWith(selectedProvider + '/') || m.startsWith(selectedProvider + '-'))
     : [];
 
-  const providerAliases = selectedProvider
-    ? Object.entries(data?.aliases ?? {}).filter(([, v]) => v.startsWith(selectedProvider + '/') || v.startsWith(selectedProvider + '-'))
-    : [];
+  const providerAliases = useMemo(() => (
+    selectedProvider
+      ? Object.entries(data?.aliases ?? {}).filter(([, v]) => v.startsWith(selectedProvider + '/') || v.startsWith(selectedProvider + '-'))
+      : []
+  ), [selectedProvider, data?.aliases]);
+
+  useEffect(() => {
+    const drafts = Object.fromEntries(providerAliases.map(([alias, model]) => [alias, model]));
+    setAliasDrafts(drafts);
+  }, [providerAliases]);
+
+  async function handleAddAlias() {
+    const n = aliasForm.name.trim();
+    const m = aliasForm.model.trim();
+    if (!n || !m) return;
+    setAliasSaving('add');
+    try {
+      await fetch('/api/aliases/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: n, model: m }),
+      });
+      await load();
+      setAliasForm({ name: '', model: '' });
+    } catch {}
+    setAliasSaving('');
+  }
+
+  async function handleRemoveAlias(alias: string) {
+    setAliasSaving(alias);
+    try {
+      await fetch('/api/aliases/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias }),
+      });
+      await load();
+    } catch {}
+    setAliasSaving('');
+  }
+
+  async function handleUpdateAlias(alias: string) {
+    const model = (aliasDrafts[alias] ?? '').trim();
+    if (!model) return;
+    setAliasSaving(`save:${alias}`);
+    try {
+      await fetch('/api/aliases/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias, model }),
+      });
+      await load();
+    } catch {}
+    setAliasSaving('');
+  }
 
   return (
     <div style={{
@@ -329,7 +385,7 @@ export default function ProvidersPage() {
         </span>
       </div>
 
-      {loading && <div style={{ padding: 20, color: '#555', fontSize: 12 }}>Loading...</div>}
+      {loading && <OlympusLoader label="LOADING PROVIDERS" compact />}
       {error && <div style={{ padding: 20, color: '#ef4444', fontSize: 12 }}>{error}</div>}
 
       {isMobile && data && (
@@ -425,7 +481,7 @@ export default function ProvidersPage() {
                           <div style={{ height: '100%', width: `${metric.pct}%`, background: metric.pct >= 90 ? 'var(--danger)' : '#2a7a94', borderRadius: 999 }} />
                         </div>
                         {metric.resetAt && <span style={{ fontSize: 9, color: '#666' }}>resets {formatDateTimeInTimezone(metric.resetAt, {}, timezone)}</span>}
-                        {(metric.source && metric.source !== 'api') && <span style={{ fontSize: 9, color: '#B87333' }}>source: {metric.source}</span>}
+                        {(metric.source && metric.source !== 'api') && <span style={{ fontSize: 9, color: '#D49B35' }}>source: {metric.source}</span>}
                       </div>
                     )) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -436,21 +492,80 @@ export default function ProvidersPage() {
                   </div>
                 </Surface>
 
-                {providerAliases.length > 0 && (
-                  <Surface variant="panel">
-                    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
-                      ALIASES
-                    </div>
-                    <div style={{ padding: '8px 12px', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 16px' }}>
-                      {providerAliases.map(([alias, model]) => (
-                        <div key={alias} style={{ display: 'contents' }}>
-                          <span style={{ fontSize: 11, color: '#B87333' }}>{alias}</span>
-                          <span style={{ fontSize: 11, color: '#888' }}>{model}</span>
+                <Surface variant="panel">
+                  <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
+                    ALIASES
+                  </div>
+                  <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {providerAliases.length === 0 ? (
+                      <div style={{ fontSize: 10, color: '#555' }}>no aliases for this provider</div>
+                    ) : providerAliases.map(([alias, model]) => {
+                      const draft = aliasDrafts[alias] ?? model;
+                      const changed = draft.trim() !== model;
+                      return (
+                        <div key={alias} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                          <button
+                            onClick={() => handleRemoveAlias(alias)}
+                            disabled={aliasSaving === alias}
+                            style={{
+                              background: 'none', border: 'none', color: aliasSaving === alias ? '#555' : '#8b5e3c',
+                              cursor: 'pointer', fontSize: 13, padding: 0, lineHeight: 1,
+                            }}
+                            title={`Remove alias ${alias}`}
+                          >{aliasSaving === alias ? '…' : '✕'}</button>
+                          <span style={{ color: '#D49B35', minWidth: 90 }}>{alias}</span>
+                          <input
+                            value={draft}
+                            onChange={(e) => setAliasDrafts((prev) => ({ ...prev, [alias]: e.target.value }))}
+                            placeholder="provider/model"
+                            style={{
+                              flex: 1, background: '#0a141a', border: changed ? '1px solid #D49B35' : '1px solid #1a2a33', borderRadius: 4,
+                              padding: '4px 6px', fontSize: 10, color: '#d6e2e8', outline: 'none',
+                            }}
+                          />
+                          <button
+                            onClick={() => handleUpdateAlias(alias)}
+                            disabled={aliasSaving === `save:${alias}` || !draft.trim() || !changed}
+                            style={{
+                              background: aliasSaving === `save:${alias}` || !draft.trim() || !changed ? 'transparent' : '#1a2a33',
+                              border: '1px solid #2a4a5a', borderRadius: 4, color: '#d6e2e8',
+                              fontSize: 10, padding: '4px 8px', cursor: 'pointer',
+                            }}
+                          >{aliasSaving === `save:${alias}` ? '…' : 'SAVE'}</button>
                         </div>
-                      ))}
+                      );
+                    })}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 6 }}>
+                      <input
+                        value={aliasForm.name}
+                        onChange={(e) => setAliasForm(f => ({ ...f, name: e.target.value }))}
+                        placeholder="new alias"
+                        style={{
+                          flex: '0 0 90px', background: '#0a141a', border: '1px solid #1a2a33', borderRadius: 4,
+                          padding: '4px 6px', fontSize: 10, color: '#d6e2e8', outline: 'none',
+                        }}
+                      />
+                      <input
+                        value={aliasForm.model}
+                        onChange={(e) => setAliasForm(f => ({ ...f, model: e.target.value }))}
+                        placeholder="target model"
+                        style={{
+                          flex: 1, background: '#0a141a', border: '1px solid #1a2a33', borderRadius: 4,
+                          padding: '4px 6px', fontSize: 10, color: '#d6e2e8', outline: 'none',
+                        }}
+                      />
+                      <button
+                        onClick={handleAddAlias}
+                        disabled={aliasSaving === 'add' || !aliasForm.name.trim() || !aliasForm.model.trim()}
+                        style={{
+                          background: aliasSaving === 'add' || !aliasForm.name.trim() || !aliasForm.model.trim() ? 'transparent' : '#1a2a33',
+                          border: '1px solid #2a4a5a', borderRadius: 4, color: '#d6e2e8',
+                          fontSize: 10, padding: '4px 8px', cursor: 'pointer',
+                        }}
+                      >{aliasSaving === 'add' ? '…' : '+NEW'}</button>
                     </div>
-                  </Surface>
-                )}
+                  </div>
+                </Surface>
 
                 {providerModels.length > 0 && (
                   <Surface variant="panel">
