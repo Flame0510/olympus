@@ -1178,6 +1178,7 @@ html, body { height: 100%; height: 100dvh; background: var(--bg); color: var(--t
 .ui-page-description { margin: 10px 0 0; color: var(--text-dim); max-width: 760px; line-height: 1.5; font-size: 13px; }
 .ui-surface { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 16px; min-height: 110px; }
 .ui-surface--panel { border-radius: 6px; min-height: 0; padding: 0; overflow: hidden; }
+.providers-panel { flex-shrink: 0; min-height: auto; }
 .ui-surface--subtle { background: rgba(255,255,255,0.015); }
 .ui-tone--accent { border-color: var(--copper-dim); }
 .ui-tone--success { border-color: #255b3f; }

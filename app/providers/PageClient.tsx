@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useResponsive } from '../design-system';
 import { Pill, Surface, toneVars } from '../components/ui';
 import OlympusLoader from '../components/OlympusLoader';
@@ -243,6 +243,10 @@ export default function ProvidersPage() {
   const [usageData, setUsageData] = useState<ProviderUsageData | null>(null);
   const [usageLoaded, setUsageLoaded] = useState(false);
   const [usageError, setUsageError] = useState('');
+  const [loginLoading, setLoginLoading] = useState<string>('');
+  const [oauthFlow, setOauthFlow] = useState<{provider:string;verificationUri:string|null;userCode:string|null} | null>(null);
+  const [apiKeyModal, setApiKeyModal] = useState<string | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState('');
   const [aliasForm, setAliasForm] = useState({ name: '', model: '' });
   const [aliasSaving, setAliasSaving] = useState('');
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>({});
@@ -369,6 +373,56 @@ export default function ProvidersPage() {
     setAliasSaving('');
   }
 
+  const oauthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function handleOAuthLogin(provider: string) {
+    setLoginLoading(provider); setOauthFlow(null);
+    try {
+      const res = await fetch('/api/providers/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, method: 'oauth' })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginLoading('');
+        return;
+      }
+      if (data.verificationUri || data.userCode) {
+        setOauthFlow({ provider, verificationUri: data.verificationUri, userCode: data.userCode });
+        if (oauthTimerRef.current) clearInterval(oauthTimerRef.current);
+        oauthTimerRef.current = setInterval(async () => {
+          try {
+            const sRes = await fetch(`/api/providers/oauth/status?provider=${encodeURIComponent(provider)}`);
+            const sData = await sRes.json();
+            if (sData.status === 'completed') { clearInterval(oauthTimerRef.current!); oauthTimerRef.current = null; setOauthFlow(null); await load(); }
+            else if (sData.status === 'failed') { clearInterval(oauthTimerRef.current!); oauthTimerRef.current = null; setOauthFlow(null); }
+          } catch {}
+        }, 3000);
+      } else if (data.status === 'already_connected') { await load(); }
+    } catch {
+      // If OAuth login fails (provider not supported, etc.), silently reset
+    }
+    setLoginLoading('');
+  }
+
+  async function handleApiKeyConnect(provider: string) {
+    if (!apiKeyInput.trim()) return;
+    setLoginLoading(provider);
+    try {
+      await fetch('/api/providers/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, method: 'api-key', apiKey: apiKeyInput.trim() }) });
+      setApiKeyModal(null); setApiKeyInput(''); await load();
+    } catch {}
+    setLoginLoading('');
+  }
+
+  async function handleDisconnect(provider: string) {
+    setLoginLoading(provider);
+    try {
+      await fetch('/api/providers/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ provider, disconnect: true }) });
+      await load();
+    } catch {}
+    setLoginLoading('');
+  }
+
   return (
     <div style={{
       height: '100vh', background: 'var(--bg)', color: 'var(--text)',
@@ -432,10 +486,10 @@ export default function ProvidersPage() {
             })}
           </section>
 
-          <section style={{ flex: 1, overflow: 'auto', padding: isMobile ? 10 : 16, display: isMobile && tab !== 'details' ? 'none' : 'flex', flexDirection: 'column', gap: 16 }}>
+          <section style={{ flex: 1, overflow: 'auto', padding: isMobile ? 10 : 16, display: isMobile && tab !== 'details' ? 'none' : 'flex', flexDirection: 'column', gap: 16, alignItems: 'stretch' }}>
             {selected && (
               <>
-                <Surface variant="panel">
+                <Surface variant="panel" className="providers-panel">
                   <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
                     AUTH
                   </div>
@@ -453,9 +507,58 @@ export default function ProvidersPage() {
                       />
                     )}
                   </div>
+
+                  {/* Login/OAuth buttons */}
+                  <div style={{ padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {selectedOAuth && selectedOAuth.status !== 'ok' && (selected?.profiles.count ?? 0) === 0 && (
+                      <button onClick={() => handleOAuthLogin(selectedProvider)} disabled={loginLoading === selectedProvider}
+                        style={{ background: '#1a2a33', border: '1px solid #2a4a5a', borderRadius: 4, color: '#d6e2e8', fontSize: 10, padding: '6px 12px', cursor: 'pointer' }}>
+                        {loginLoading === selectedProvider ? '⏳' : '🔑'} LOGIN WITH {selectedProvider.toUpperCase()}
+                      </button>
+                    )}
+                    {(selected?.effective.kind === 'token' || selected?.effective.kind === 'api-key') && (
+                      <button onClick={() => setApiKeyModal(selectedProvider)}
+                        style={{ background: '#1a2a33', border: '1px solid #2a4a5a', borderRadius: 4, color: '#d6e2e8', fontSize: 10, padding: '6px 12px', cursor: 'pointer' }}>
+                        + ADD API KEY
+                      </button>
+                    )}
+                    {(selectedOAuth?.status === 'ok' || (selected?.profiles.count ?? 0) > 0) && (
+                      <>
+                        <span style={{ fontSize: 10, color: '#4a8' }}>✅ Connected{selectedOAuth?.profiles?.[0]?.label ? ` via ${selectedOAuth.profiles[0].label}` : ''}</span>
+                        <button onClick={() => handleDisconnect(selectedProvider)} disabled={loginLoading === selectedProvider}
+                          style={{ background: 'transparent', border: '1px solid #5a3a3a', borderRadius: 4, color: '#d66', fontSize: 10, padding: '6px 12px', cursor: 'pointer' }}>
+                          {loginLoading === selectedProvider ? '⏳' : '🚪'} DISCONNECT
+                        </button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* OAuth device code flow */}
+                  {oauthFlow && oauthFlow.provider === selectedProvider && (
+                    <div style={{ margin: '4px 12px 8px', padding: 8, background: '#0d1a22', border: '1px solid #1a3a4a', borderRadius: 4 }}>
+                      {oauthFlow.verificationUri && <div style={{ fontSize: 10, color: '#8ab', marginBottom: 4 }}>1. Open <a href={oauthFlow.verificationUri} target="_blank" style={{ color: '#6af' }}>{oauthFlow.verificationUri}</a></div>}
+                      {oauthFlow.userCode && <div style={{ fontSize: 10, color: '#8ab', marginBottom: 4 }}>2. Enter code: <strong style={{ fontSize: 14, color: '#fff', letterSpacing: 4 }}>{oauthFlow.userCode}</strong></div>}
+                      <div style={{ fontSize: 9, color: '#666' }}>⏳ Waiting for authorization...</div>
+                    </div>
+                  )}
+
+                  {/* API Key modal */}
+                  {apiKeyModal === selectedProvider && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                      <div style={{ background: '#0f1a22', border: '1px solid #1a3a4a', borderRadius: 8, padding: 20, minWidth: 320 }}>
+                        <div style={{ fontSize: 12, color: '#d6e2e8', marginBottom: 12 }}>Add API Key for <strong>{selectedProvider}</strong></div>
+                        <input value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder="sk-..."
+                          style={{ width: '100%', background: '#0a141a', border: '1px solid #1a2a33', borderRadius: 4, padding: '8px 10px', color: '#d6e2e8', fontSize: 11, marginBottom: 12, boxSizing: 'border-box' }} />
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button onClick={() => { setApiKeyModal(null); setApiKeyInput(''); }} style={{ background: 'transparent', border: '1px solid #2a4a5a', borderRadius: 4, color: '#888', fontSize: 10, padding: '6px 12px', cursor: 'pointer' }}>CANCEL</button>
+                          <button onClick={() => handleApiKeyConnect(selectedProvider)} disabled={!apiKeyInput.trim()} style={{ background: '#1a3a4a', border: '1px solid #2a5a7a', borderRadius: 4, color: '#d6e2e8', fontSize: 10, padding: '6px 12px', cursor: 'pointer' }}>CONNECT</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </Surface>
 
-                <Surface variant="panel">
+                <Surface variant="panel" className="providers-panel">
                   <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
                     QUOTA &amp; USAGE
                   </div>
@@ -492,7 +595,7 @@ export default function ProvidersPage() {
                   </div>
                 </Surface>
 
-                <Surface variant="panel">
+                <Surface variant="panel" className="providers-panel">
                   <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
                     ALIASES
                   </div>
@@ -568,7 +671,7 @@ export default function ProvidersPage() {
                 </Surface>
 
                 {providerModels.length > 0 && (
-                  <Surface variant="panel">
+                  <Surface variant="panel" className="providers-panel">
                     <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--copper)', letterSpacing: '0.08em' }}>
                       ALLOWED MODELS ({providerModels.length})
                     </div>
