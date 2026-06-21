@@ -157,6 +157,7 @@ export default function WorkspaceClient() {
   const [previewMode, setPreviewMode] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isDragging, setIsDragging] = useState(false);
+  const [mobileView, setMobileView] = useState<'tree' | 'editor'>('tree');
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
 
@@ -180,6 +181,7 @@ export default function WorkspaceClient() {
     setSelectedNode(node);
     setFileLoading(true);
     setSaveState('idle');
+    setMobileView('editor');
     try {
       const ext = extOf(node.name);
       const isBinary = ['.png','.jpg','.jpeg','.gif','.webp','.svg','.pdf','.ico'].includes(ext);
@@ -233,11 +235,27 @@ export default function WorkspaceClient() {
   const dirty = editContent !== fileContent && !fileLoading && selectedPath != null;
   const lang = selectedNode ? (EXT_LANG[extOf(selectedNode.name)] ?? 'text') : 'text';
 
+  // Mobile: detect viewport
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-mono-stack)', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ height: 48, padding: '0 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: 20, letterSpacing: '4px', color: 'var(--copper)' }}>WORKSPACE</span>
+        {isMobile && mobileView === 'editor' ? (
+          <button onClick={() => setMobileView('tree')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M9 2L4 7l5 5"/></svg>
+            BACK
+          </button>
+        ) : (
+          <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: 20, letterSpacing: '4px', color: 'var(--copper)' }}>WORKSPACE</span>
+        )}
         {selectedPath && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {isMarkdown(selectedNode?.name ?? '') && (
@@ -255,7 +273,7 @@ export default function WorkspaceClient() {
       {/* Body */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Sidebar tree */}
-        <div style={{ width: sidebarWidth, minWidth: sidebarWidth, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ width: isMobile ? '100%' : sidebarWidth, minWidth: isMobile ? '100%' : sidebarWidth, borderRight: isMobile ? 'none' : '1px solid var(--border)', display: isMobile && mobileView === 'editor' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', paddingTop: 6, paddingBottom: 24 }}>
             {treeLoading ? (
               <div style={{ padding: '20px 12px', color: '#555', fontSize: 11 }}>Loading…</div>
@@ -267,16 +285,18 @@ export default function WorkspaceClient() {
           </div>
         </div>
 
-        {/* Resize handle */}
+        {/* Resize handle — desktop only */}
+        {!isMobile && (
         <div
           onMouseDown={onMouseDown}
           style={{ width: 4, cursor: 'col-resize', background: isDragging ? 'var(--copper)' : 'transparent', transition: isDragging ? 'none' : 'background 0.15s', flexShrink: 0 }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = '#333'; }}
           onMouseLeave={(e) => { if (!isDragging) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
         />
+        )}
 
         {/* Editor / Preview */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, minWidth: 0, display: isMobile && mobileView === 'tree' ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {!selectedPath ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444', fontSize: 12 }}>
               Select a file to view or edit

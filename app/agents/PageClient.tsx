@@ -113,6 +113,7 @@ export default function AgentsPage() {
   const [wizardError, setWizardError] = useState('');
   const [modelPickerAgentId, setModelPickerAgentId] = useState<string | null>(null);
   const [modelSavingAgentId, setModelSavingAgentId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
 
   const selectedAgent = useMemo(() => agents.find((a) => a.agent_id === selectedAgentId) ?? null, [agents, selectedAgentId]);
   const selectedAgentChannel = selectedAgentId ? agentChannels[selectedAgentId] : undefined;
@@ -206,16 +207,25 @@ export default function AgentsPage() {
   return (
     <div style={{ height: '100vh', background: 'var(--bg)', color: 'var(--text)', fontFamily: 'var(--font-mono-stack)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <div style={{ height: '48px', padding: '0 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: '20px', letterSpacing: '4px', color: 'var(--copper)' }}>AGENTS</span>
-        <button onClick={openWizard} style={{ border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg3)', color: 'var(--copper)', fontSize: 11, padding: '5px 10px', cursor: 'pointer' }}>+ NEW AGENT</button>
+        {isMobile && mobileDetailOpen ? (
+          <button onClick={() => setMobileDetailOpen(false)} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: 'none', color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 0' }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M9 2L4 7l5 5"/></svg>
+            BACK
+          </button>
+        ) : (
+          <>
+            <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: '20px', letterSpacing: '4px', color: 'var(--copper)' }}>AGENTS</span>
+            <button onClick={openWizard} style={{ border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg3)', color: 'var(--copper)', fontSize: 11, padding: '5px 10px', cursor: 'pointer' }}>+ NEW AGENT</button>
+          </>
+        )}
       </div>
       <div style={{ flex: 1, display: 'flex', minHeight: 0, flexDirection: isMobile ? 'column' : 'row' }}>
-        <section style={{ width: isMobile ? '100%' : '32%', minWidth: isMobile ? 0 : 290, borderRight: isMobile ? 'none' : '1px solid var(--border)', overflow: 'auto' }}>
+        <section style={{ width: isMobile ? '100%' : '32%', minWidth: isMobile ? 0 : 290, borderRight: isMobile ? 'none' : '1px solid var(--border)', overflow: 'auto', display: isMobile && mobileDetailOpen ? 'none' : undefined }}>
           {!agentsLoaded && <div style={{ padding: 14, display: 'grid', gap: 14 }}>{Array.from({ length: 5 }).map((_, index) => <div key={index} style={{ border: '1px solid var(--border)', background: 'var(--bg2)', padding: 12 }}><SkeletonLines count={3} /></div>)}</div>}
           {agentsLoaded && agents.length === 0 && <div style={{ padding: 14, color: '#888', fontSize: 12 }}>Nessun agente rilevato</div>}
           {agentsLoaded && agents.map((agent) => {
             const isActive = selectedAgentId === agent.agent_id; const hasWorking = agent.status === 'working'; const model = agent.config_model ?? agent.sessions[0]?.model ?? 'unknown'; const channelSummary = agentChannels[agent.agent_id]; const telegramAccounts = channelSummary?.telegram.accounts ?? []; const telegramBindings = channelSummary?.telegram.bindings ?? []; const primaryAccount = telegramAccounts[0];
-            return <button key={agent.agent_id} onClick={() => setSelectedAgentId(agent.agent_id)} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
+            return <button key={agent.agent_id} onClick={() => { setSelectedAgentId(agent.agent_id); if (isMobile) setMobileDetailOpen(true); }} style={{ width: '100%', textAlign: 'left', background: isActive ? '#1a1208' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', color: 'var(--text)', padding: '10px 12px', cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: hasWorking ? '#22c55e' : '#888', display: 'inline-block' }} /><span style={{ color: isActive ? 'var(--copper)' : 'var(--text)', fontSize: 12 }}>{agent.agent_id}</span></div><span style={{ fontSize: 10, color: '#555' }}>{agent.sessions.length} sess</span></div>
               <div style={{ display: 'inline-block', marginTop: 6, padding: '3px 6px', border: '1px solid var(--border)', borderRadius: 999, color: '#888', fontSize: 10, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={model}>{model}</div>
               <div style={{ ...metaLineStyle(), marginTop: 6 }}>{agent.workspace_path}</div>
@@ -223,7 +233,7 @@ export default function AgentsPage() {
             </button>;
           })}
         </section>
-        <section style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--bg2)', padding: 12 }}>
+        <section style={{ flex: 1, minWidth: 0, overflow: 'auto', background: 'var(--bg2)', padding: 12, display: isMobile && !mobileDetailOpen ? 'none' : undefined }}>
           {selectedAgent ? <div style={{ display: 'grid', gap: 10 }}>
             <div style={{ fontSize: 11, color: '#888' }}>Config, Telegram bindings e wizard. I tab FILES + CONFIG e l'editor file sono stati spostati in Workspace.</div>
             {selectedAgentChannel && editableConfig && <>
