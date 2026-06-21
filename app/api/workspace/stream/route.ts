@@ -4,59 +4,31 @@ import { type NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-interface ConfiguredAgent {
-  id: string;
-  workspace?: string;
-  [key: string]: unknown;
-}
+const ROOT_PATH = '/data/.openclaw';
+const POLL_MS = 3000;
+const IGNORED_DIRS = new Set(['node_modules', '.trash']);
+const ALLOWED_EXT = new Set(['.md', '.json', '.txt', '.html', '.py', '.css', '.js', '.ts', '.tsx', '.yaml', '.yml', '.env', '.sh', '.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.ico']);
 
 interface SnapshotEntry {
-  agent_id: string;
   path: string;
   rel_path: string;
-  type: 'file' | 'folder';
+  type: 'file' | 'directory';
   size: number;
   mtimeMs: number;
 }
 
-interface WorkspaceChange {
-  agent_id: string;
-  path: string;
-  rel_path: string;
-  type: 'file' | 'folder';
+interface WorkspaceChange extends SnapshotEntry {
   change: 'added' | 'modified' | 'removed';
 }
 
-const MAX_DEPTH = 5;
-const POLL_MS = 3000;
-const ALLOWED_EXT = new Set(['.md', '.json', '.txt', '.html', '.py', '.css', '.js', '.ts', '.tsx', '.yaml', '.yml', '.env', '.sh', '.pdf']);
-const IGNORED_DIRS = new Set(['node_modules', '.trash']);
-
-function readConfiguredAgents(): ConfiguredAgent[] {
-  try {
-    const raw = fs.readFileSync('/data/.openclaw/openclaw.json', 'utf8');
-    const parsed = JSON.parse(raw) as { agents?: { list?: unknown[] } };
-    const list = parsed?.agents?.list;
-    if (!Array.isArray(list)) return [];
-    return list.filter((agent): agent is ConfiguredAgent => !!agent && typeof (agent as ConfiguredAgent).id === 'string');
-  } catch {
-    return [];
-  }
+function shouldIgnoreName(name: string): boolean {
+  return name.startsWith('.') || IGNORED_DIRS.has(name);
 }
 
-function mapWorkspace(agent: ConfiguredAgent): string | null {
-  if (typeof agent.workspace === 'string' && agent.workspace.trim() && fs.existsSync(agent.workspace)) return agent.workspace;
-  if (agent.id === 'ops') return '/data/.openclaw/workspace-ops/';
-  const candidate = `/data/.openclaw/workspace-${agent.id}/`;
-  if (fs.existsSync(candidate)) return candidate;
-  return null;
-}
-
-function collectWorkspaceSnapshot(agentId: string, workspacePath: string): Map<string, SnapshotEntry> {
+function collectSnapshot(): Map<string, SnapshotEntry> {
   const snapshot = new Map<string, SnapshotEntry>();
 
-  function walk(dir: string, depth: number, prefix = '') {
-    if (depth > MAX_DEPTH) return;
+  function walk(dir: string, prefix = ''): void {
     let entries: fs.Dirent[] = [];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -65,7 +37,7 @@ function collectWorkspaceSnapshot(agentId: string, workspacePath: string): Map<s
     }
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.')) continue;
+      if (shouldIgnoreName(entry.name)) continue;
       const absPath = path.join(dir, entry.name);
       const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
 
@@ -77,45 +49,19 @@ function collectWorkspaceSnapshot(agentId: string, workspacePath: string): Map<s
       }
 
       if (entry.isDirectory()) {
-        if (IGNORED_DIRS.has(entry.name)) continue;
-        snapshot.set(absPath, {
-          agent_id: agentId,
-          path: absPath,
-          rel_path: relPath,
-          type: 'folder',
-          size: 0,
-          mtimeMs: stat.mtimeMs,
-        });
-        walk(absPath, depth + 1, relPath);
+        snapshot.set(absPath, { path: absPath, rel_path: relPath, type: 'directory', size: 0, mtimeMs: stat.mtimeMs });
+        walk(absPath, relPath);
         continue;
       }
 
       const ext = path.extname(entry.name).toLowerCase();
       if (!ALLOWED_EXT.has(ext)) continue;
-      snapshot.set(absPath, {
-        agent_id: agentId,
-        path: absPath,
-        rel_path: relPath,
-        type: 'file',
-        size: stat.size,
-        mtimeMs: stat.mtimeMs,
-      });
+      snapshot.set(absPath, { path: absPath, rel_path: relPath, type: 'file', size: stat.size, mtimeMs: stat.mtimeMs });
     }
   }
 
-  walk(workspacePath, 0);
+  walk(ROOT_PATH);
   return snapshot;
-}
-
-function collectAllSnapshots(): Map<string, SnapshotEntry> {
-  const all = new Map<string, SnapshotEntry>();
-  for (const agent of readConfiguredAgents()) {
-    const workspace = mapWorkspace(agent);
-    if (!workspace) continue;
-    const snapshot = collectWorkspaceSnapshot(agent.id, workspace);
-    for (const [key, value] of snapshot) all.set(`${agent.id}:${key}`, value);
-  }
-  return all;
 }
 
 function diffSnapshots(previous: Map<string, SnapshotEntry>, next: Map<string, SnapshotEntry>): WorkspaceChange[] {
@@ -124,18 +70,16 @@ function diffSnapshots(previous: Map<string, SnapshotEntry>, next: Map<string, S
   for (const [key, nextEntry] of next) {
     const prevEntry = previous.get(key);
     if (!prevEntry) {
-      changes.push({ agent_id: nextEntry.agent_id, path: nextEntry.path, rel_path: nextEntry.rel_path, type: nextEntry.type, change: 'added' });
+      changes.push({ ...nextEntry, change: 'added' });
       continue;
     }
     if (prevEntry.mtimeMs !== nextEntry.mtimeMs || prevEntry.size !== nextEntry.size || prevEntry.type !== nextEntry.type) {
-      changes.push({ agent_id: nextEntry.agent_id, path: nextEntry.path, rel_path: nextEntry.rel_path, type: nextEntry.type, change: 'modified' });
+      changes.push({ ...nextEntry, change: 'modified' });
     }
   }
 
   for (const [key, prevEntry] of previous) {
-    if (!next.has(key)) {
-      changes.push({ agent_id: prevEntry.agent_id, path: prevEntry.path, rel_path: prevEntry.rel_path, type: prevEntry.type, change: 'removed' });
-    }
+    if (!next.has(key)) changes.push({ ...prevEntry, change: 'removed' });
   }
 
   return changes;
@@ -143,7 +87,7 @@ function diffSnapshots(previous: Map<string, SnapshotEntry>, next: Map<string, S
 
 export async function GET(request: NextRequest): Promise<Response> {
   const encoder = new TextEncoder();
-  let previous = collectAllSnapshots();
+  let previous = collectSnapshot();
 
   const stream = new ReadableStream({
     start(controller) {
@@ -151,20 +95,15 @@ export async function GET(request: NextRequest): Promise<Response> {
         controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
       };
 
-      send('workspace_ready', { type: 'workspace_ready', ts: Date.now(), count: previous.size });
+      send('workspace_ready', { type: 'workspace_ready', ts: Date.now(), root: ROOT_PATH, count: previous.size });
 
       const interval = setInterval(() => {
         try {
-          const next = collectAllSnapshots();
+          const next = collectSnapshot();
           const changes = diffSnapshots(previous, next);
           previous = next;
           if (changes.length > 0) {
-            send('workspace_changed', {
-              type: 'workspace_changed',
-              ts: Date.now(),
-              changed: changes.slice(0, 200),
-              truncated: changes.length > 200,
-            });
+            send('workspace_changed', { type: 'workspace_changed', ts: Date.now(), changed: changes.slice(0, 200), truncated: changes.length > 200 });
           } else {
             send('heartbeat', { type: 'heartbeat', ts: Date.now() });
           }

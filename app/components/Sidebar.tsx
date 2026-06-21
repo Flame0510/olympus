@@ -48,6 +48,16 @@ const NAV: NavItem[] = [
     ),
   },
   {
+    href: '/workspace',
+    label: 'Workspace',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M1.75 4.5a1.75 1.75 0 0 1 1.75-1.75h2.35l1.2 1.5h5.45a1.75 1.75 0 0 1 1.75 1.75v5.5a1.75 1.75 0 0 1-1.75 1.75H3.5a1.75 1.75 0 0 1-1.75-1.75v-7Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+        <path d="M1.75 6h12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     href: '/providers',
     label: 'Providers',
     icon: (

@@ -36,6 +36,16 @@ const navItems = [
     ),
   },
   {
+    label: 'Workspace',
+    path: '/workspace',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2.5 5a1.5 1.5 0 0 1 1.5-1.5h2.3l1.2 1.5H14a1.5 1.5 0 0 1 1.5 1.5v6A1.5 1.5 0 0 1 14 14H4a1.5 1.5 0 0 1-1.5-1.5V5z"/>
+        <path d="M2.5 6.5h13"/>
+      </svg>
+    ),
+  },
+  {
     label: 'Providers',
     path: '/providers',
     icon: (
