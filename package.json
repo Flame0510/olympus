@@ -1,14 +1,45 @@
 {
-  "name": "olympus-daemon",
+  "name": "@flame0510/olympus",
   "version": "1.0.0",
-  "description": "Olympus Agency Monitor — SQLite event logger daemon",
-  "main": "daemon.js",
+  "description": "Olympus — OpenClaw Agency Monitor Dashboard. Monitor workspaces, config, agents, lineage, cron, e costi.",
+  "keywords": ["openclaw", "olympus", "dashboard", "monitoring", "ai", "agents"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Flame0510/olympus.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Flame0510/olympus/issues"
+  },
+  "homepage": "https://github.com/Flame0510/olympus#readme",
+  "bin": {
+    "olympus": "./bin/olympus.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin/",
+    "app/",
+    "lib/",
+    "public/",
+    "scripts/",
+    "docs/",
+    "agent-templates/",
+    "middleware.ts",
+    "next.config.mjs",
+    "tsconfig.json",
+    "next-env.d.ts",
+    "*.css",
+    "*.png"
+  ],
   "scripts": {
     "dev": "next dev -p 3720",
     "build": "next build",
     "start": "next start -p 3720",
     "daemon": "node daemon.js",
-    "smoke:db-bootstrap": "node scripts/smoke-db-bootstrap.mjs"
+    "smoke:db-bootstrap": "node scripts/smoke-db-bootstrap.mjs",
+    "postinstall": "node bin/postinstall.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",

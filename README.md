@@ -9,31 +9,43 @@ Real-time monitoring dashboard for AI agent systems.
 - **Live agent graph** — force-directed graph showing parent→child session hierarchy in real time
 - **Cost tracker** — per session / model / day breakdown with optional manual override
 - **Real-time event feed** — spawn, complete, error events with label and timestamp
+- **Workspace file editor** — file tree con navigazione tastiera, icone per tipo file, viewer PDF integrato, editor markdown con preview
+- **Agent config manager** — creazione/modifica agenti, binding Telegram, wizard template
+- **Provider/OAuth UI** — login provider interattivi con bottoni OAuth e API key
 - **Period filters** — today / 7d / 30d / all time
 - **System health** — CPU, RAM, disk, daemon status, cron checks
 - **PYTHIA** — embedded AI assistant for natural-language queries about sessions and costs
-- **Mobile-optimized layout** — dedicated mobile tab interface with bottom navigation
-- **Responsive breakpoint policy** — Bootstrap v5 breakpoint tokens (`sm`, `md`, `lg`, `xl`, `xxl`) reused across the UI
+- **Mobile-optimized layout** — 3 breakpoint: phone (<768px), tablet (768-1023px), desktop (≥1024px)
 - **In-browser PDF preview** — PDFs rendered inside the web UI, including Android/mobile browsers
 
-## Requirements
-
-- Node.js 18+
-- SQLite3 (`apt-get install sqlite3`)
-- An agent runtime that exposes session data via CLI (OpenClaw recommended)
-
-## Quick Start
+## Installazione
 
 ```bash
-git clone https://github.com/Flame0510/olympus \
-  /data/.openclaw/workspace-ops/olympus
-cd /data/.openclaw/workspace-ops/olympus
+# Globale — usa il comando 'olympus' ovunque
+npm i -g @flame0510/olympus
+olympus start
+
+# Oppure via npx (senza install)
+npx @flame0510/olympus start
+```
+
+Dashboard available at: `http://localhost:3720`
+
+## Quick Start (da sorgente)
+
+```bash
+git clone https://github.com/Flame0510/olympus
+cd olympus
 npm install
 PORT=3720 npm run build
 PORT=3720 npm start
 ```
 
-Dashboard available at: `http://localhost:3720`
+## Aggiornamenti
+
+```bash
+npm update -g @flame0510/olympus
+```
 
 ## Configuration
 
