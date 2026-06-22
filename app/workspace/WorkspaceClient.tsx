@@ -303,6 +303,8 @@ export default function WorkspaceClient() {
       setFocusedIndex(idx);
       const el = document.getElementById(`tree-item-${node.relPath.replace(/[^a-zA-Z0-9_-]/g, '_')}`);
       el?.scrollIntoView({ block: 'nearest' });
+      // Re-focus the tree container so keyboard nav works
+      treeContainerRef.current?.focus();
     }
   }, []);
 
