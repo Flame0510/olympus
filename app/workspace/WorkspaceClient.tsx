@@ -234,22 +234,29 @@ export default function WorkspaceClient() {
   const dragStartWidth = useRef(0);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showHidden, setShowHidden] = useState(false);
+  const [rawEntries, setRawEntries] = useState<TreeEntry[]>([]);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const flatItemsRef = useRef<FlatItem[]>([]);
 
-  // Load tree
+  // Load tree — sempre completo, filtro solo in rendering
   useEffect(() => {
     void (async () => {
       try {
         const res = await apiFetch('/api/workspace?tree=1');
         if (!res.ok) return;
         const data = await res.json() as { entries: TreeEntry[] };
-        const filtered = showHidden ? data.entries : data.entries.filter(e => !e.name.startsWith('.'));
-        setTree(buildTree(filtered));
+        setRawEntries(data.entries);
+        setTree(buildTree(showHidden ? data.entries : data.entries.filter(e => !e.name.startsWith('.'))));
       } catch { /* ignore */ }
       finally { setTreeLoading(false); }
     })();
-  }, [showHidden]);
+  }, []);
+
+  // Quando cambia showHidden, filtro senza rifare fetch
+  useEffect(() => {
+    if (rawEntries.length === 0) return;
+    setTree(buildTree(showHidden ? rawEntries : rawEntries.filter(e => !e.name.startsWith('.'))));
+  }, [showHidden, rawEntries]);
 
   // Load file
   const loadFile = useCallback(async (node: TreeNode) => {
