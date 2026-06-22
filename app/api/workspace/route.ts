@@ -51,7 +51,7 @@ function isAllowedPath(filePath: unknown): filePath is string {
 }
 
 function shouldIgnoreName(name: string): boolean {
-  return name.startsWith('.') || IGNORED_DIRS.has(name);
+  return IGNORED_DIRS.has(name);
 }
 
 function collectTree(rootDir: string): TreeEntry[] {
