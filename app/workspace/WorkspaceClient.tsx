@@ -233,30 +233,21 @@ export default function WorkspaceClient() {
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(0);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
-  const [showHidden, setShowHidden] = useState(false);
-  const [rawEntries, setRawEntries] = useState<TreeEntry[]>([]);
   const treeContainerRef = useRef<HTMLDivElement>(null);
   const flatItemsRef = useRef<FlatItem[]>([]);
 
-  // Load tree — sempre completo, filtro solo in rendering
+  // Load tree — include anche i file nascosti
   useEffect(() => {
     void (async () => {
       try {
         const res = await apiFetch('/api/workspace?tree=1');
         if (!res.ok) return;
         const data = await res.json() as { entries: TreeEntry[] };
-        setRawEntries(data.entries);
-        setTree(buildTree(showHidden ? data.entries : data.entries.filter(e => !e.name.startsWith('.'))));
+        setTree(buildTree(data.entries));
       } catch { /* ignore */ }
       finally { setTreeLoading(false); }
     })();
   }, []);
-
-  // Quando cambia showHidden, filtro senza rifare fetch
-  useEffect(() => {
-    if (rawEntries.length === 0) return;
-    setTree(buildTree(showHidden ? rawEntries : rawEntries.filter(e => !e.name.startsWith('.'))));
-  }, [showHidden, rawEntries]);
 
   // Load file
   const loadFile = useCallback(async (node: TreeNode) => {
@@ -408,13 +399,7 @@ export default function WorkspaceClient() {
             BACK
           </button>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: 20, letterSpacing: '4px', color: 'var(--copper)' }}>WORKSPACE</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#888', fontSize: 11, cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} style={{ accentColor: 'var(--copper)' }} />
-              .files
-            </label>
-          </div>
+          <span style={{ fontFamily: 'var(--font-serif-stack)', fontSize: 20, letterSpacing: '4px', color: 'var(--copper)' }}>WORKSPACE</span>
         )}
         {selectedPath && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
