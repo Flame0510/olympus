@@ -11,7 +11,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const { password } = (await request.json()) as { password?: string };
     if (!password || password !== OLYMPUS_PASSWORD) {
-      return NextResponse.json({ error: 'Password non valida' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
     }
     const token = await new SignJWT({ role: 'admin' })
       .setProtectedHeader({ alg: 'HS256' })
@@ -27,6 +27,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     return response;
   } catch {
-    return NextResponse.json({ error: 'Errore server' }, { status: 500 });
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -30,9 +30,13 @@ export async function middleware(request: NextRequest) {
   const qpToken = request.nextUrl.searchParams.get('token');
   if (qpToken === TOKEN) return NextResponse.next();
 
-  // 2. Check Authorization header
+  // 2. Check Authorization header (Bearer token)
   const auth = request.headers.get('authorization');
   if (auth === `Bearer ${TOKEN}`) return NextResponse.next();
+
+  // 2b. Check X-Agent-Token header (for internal agent-to-gateway calls)
+  const agentToken = request.headers.get('x-agent-token');
+  if (agentToken === TOKEN) return NextResponse.next();
 
   // 3. Check JWT cookie
   const cookieToken = request.cookies.get('olympus_token')?.value;
