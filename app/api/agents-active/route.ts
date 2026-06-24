@@ -1,8 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import Database from 'better-sqlite3';
+import { execSync } from 'child_process';
 import { NextResponse, type NextRequest } from 'next/server';
-import { DB_PATH } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,14 +21,6 @@ interface ConfiguredAgent {
   [key: string]: unknown;
 }
 
-interface SessionRow {
-  session_id: string;
-  status: string;
-  model: string | null;
-  label: string | null;
-  updated_at: number;
-}
-
 const ALLOWED_EXT = new Set(['.md', '.json', '.txt', '.html', '.py', '.css', '.js', '.ts', '.tsx', '.yaml', '.yml', '.env', '.sh', '.pdf']);
 
 function fileTypeFromExt(ext: string): WorkspaceFile['type'] {
@@ -43,20 +34,6 @@ function fileTypeFromExt(ext: string): WorkspaceFile['type'] {
   if (ext === '.yaml' || ext === '.yml') return 'yaml';
   if (ext === '.env') return 'env';
   return 'text';
-}
-const READONLY_DB_FALLBACKS = [
-  DB_PATH,
-  process.env.OLYMPUS_DB,
-  path.join(process.cwd(), 'events.db'),
-  '/data/.openclaw/workspace-ops/olympus-next-ts/events.db',
-  '/data/olympus/events.db',
-].filter((value, index, all): value is string => typeof value === 'string' && value.length > 0 && all.indexOf(value) === index);
-
-function mapWorkspace(agentId: string): string {
-  if (agentId === 'ops') return '/data/.openclaw/workspace-ops/';
-  const candidate = `/data/.openclaw/workspace-${agentId}/`;
-  if (fs.existsSync(candidate)) return candidate;
-  return '/data/.openclaw/';
 }
 
 const MAX_WORKSPACE_TREE_DEPTH = 32;
@@ -84,21 +61,16 @@ function listWorkspaceFiles(workspacePath: string): WorkspaceFile[] {
       if (entry.isDirectory()) {
         if (entry.name === 'node_modules' || entry.name === '.trash') continue;
         out.push({ name: entry.name, path: absPath, rel_path: relPath, type: 'folder' });
-        walk(absPath, depth + 1, relPath); continue;
+        walk(absPath, depth + 1, relPath);
+        continue;
       }
       const ext = path.extname(entry.name).toLowerCase();
       if (!ALLOWED_EXT.has(ext)) continue;
-      out.push({
-        name: entry.name,
-        path: absPath,
-        rel_path: relPath,
-        type: fileTypeFromExt(ext),
-      });
+      out.push({ name: entry.name, path: absPath, rel_path: relPath, type: fileTypeFromExt(ext) });
     }
   }
 
   walk(workspacePath, 0);
-  // Root-level files first (no '/' in rel_path), then the rest, both sorted alphabetically
   const rootFiles = out.filter((f) => f.type !== 'folder' && !f.rel_path.includes('/'));
   const rootFolders = out.filter((f) => f.type === 'folder' && !f.rel_path.includes('/'));
   const rest = out.filter((f) => f.rel_path.includes('/'));
@@ -108,22 +80,6 @@ function listWorkspaceFiles(workspacePath: string): WorkspaceFile[] {
   rest.sort((a, b) => a.rel_path.localeCompare(b.rel_path));
 
   return [...rootFiles, ...rootFolders, ...rest].slice(0, MAX_WORKSPACE_TREE_ITEMS);
-}
-
-function extractAgentId(sessionId: string): string {
-  if (!sessionId) return 'unknown';
-  const parts = sessionId.split(':');
-  return (parts.length >= 2 && parts[1]) ? parts[1] : parts[0] ?? 'unknown';
-}
-
-function formatModel(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (value && typeof value === 'object') {
-    const model = value as { primary?: unknown; model?: unknown; provider?: unknown };
-    if (typeof model.primary === 'string') return model.primary;
-    if (typeof model.model === 'string') return model.provider ? `${String(model.provider)}/${model.model}` : model.model;
-  }
-  return 'unknown';
 }
 
 function readConfiguredAgents(): ConfiguredAgent[] {
@@ -140,79 +96,84 @@ function readConfiguredAgents(): ConfiguredAgent[] {
   }
 }
 
-function isRecoverableReadError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  return [
-    'database disk image is malformed',
-    'file is not a database',
-    'unable to open database file',
-    'no such table: sessions',
-    'sql logic error',
-  ].some((needle) => message.includes(needle));
-}
-
-function loadRecentSessions(cutoff: number): SessionRow[] {
-  const warnings: string[] = [];
-
-  for (const dbPath of READONLY_DB_FALLBACKS) {
-    if (!fs.existsSync(dbPath)) {
-      warnings.push(`${dbPath}: missing`);
-      continue;
-    }
-
-    let db: Database.Database | null = null;
-    try {
-      db = new Database(dbPath, { readonly: true, fileMustExist: true });
-      const rows = db
-        .prepare(
-          `SELECT session_id, status, model, label, updated_at
-           FROM sessions WHERE updated_at >= ? ORDER BY updated_at DESC`,
-        )
-        .all(cutoff) as SessionRow[];
-      return rows;
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      warnings.push(`${dbPath}: ${detail}`);
-      if (!isRecoverableReadError(error)) throw error;
-    } finally {
-      db?.close();
-    }
-  }
-
-  if (warnings.length > 0) {
-    console.warn('[agents-active] falling back to empty activity list:', warnings.join(' | '));
-  }
-
-  return [];
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse> {
+function readDockerAgents(): { id: string; agentId: string; name: string; image: string; status: string; ports: string }[] {
   try {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const output = execSync(
+      'docker ps --filter "label=AGENT_ID" --format "{{.ID}}|{{.Label \"AGENT_ID\"}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}"',
+      { timeout: 5000, encoding: 'utf-8' },
+    ).trim();
+    if (!output) return [];
+    return output.split('\n').map((line) => {
+      const [id, agentId, name, image, status, ports] = line.split('|');
+      return { id, agentId, name, image, status, ports };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function GET(_request: NextRequest): Promise<NextResponse> {
+  try {
     const configuredAgents = readConfiguredAgents();
-    const rows = loadRecentSessions(cutoff);
+    const dockerAgents = readDockerAgents();
+    const dockerAgentIds = new Set(dockerAgents.map((d) => d.agentId));
 
-    const grouped = new Map<string, SessionRow[]>();
-    for (const row of rows) {
-      const agentId = extractAgentId(row.session_id);
-      const group = grouped.get(agentId) ?? [];
-      group.push(row);
-      grouped.set(agentId, group);
-    }
-
+    // Map workspace paths per agent
     const agents = configuredAgents.map((cfg) => {
       const agent_id = cfg.id;
-      const sessions = (grouped.get(agent_id) ?? []).slice(0, 5);
-      const workspace_path = mapWorkspace(agent_id);
-      const files = listWorkspaceFiles(workspace_path);
+      const dockerInfo = dockerAgents.find((d) => d.agentId === agent_id);
+      const workspace_path = agent_id === 'ops' || agent_id === 'core'
+        ? '/data/.openclaw/workspace-ops/'
+        : `/data/.openclaw/workspace-${agent_id}/`;
+
+      // Only read workspace for agents on the host (not running as separate containers)
+      const files = dockerInfo ? [] : (fs.existsSync(workspace_path) ? listWorkspaceFiles(workspace_path) : []);
+
       const config_model = formatModel(cfg.model ?? cfg.defaultModel ?? cfg.default_model);
-      const latestStatus = sessions[0]?.status;
-      const status = latestStatus === 'working' ? 'working' : latestStatus ? 'idle' : 'inactive';
-      return { agent_id, label: cfg.label ?? agent_id, config_model, workspace_path, files, sessions, status, config: cfg };
+      const status = dockerInfo
+        ? (dockerInfo.status.startsWith('Up') ? 'running' : dockerInfo.status.toLowerCase())
+        : 'inactive';
+
+      return {
+        agent_id,
+        label: cfg.label ?? agent_id,
+        config_model,
+        workspace_path,
+        files,
+        docker: dockerInfo ?? null,
+        status,
+        config: cfg,
+      };
     });
+
+    // Add any Docker-only agents not in config
+    for (const d of dockerAgents) {
+      if (!configuredAgents.find((c) => c.id === d.agentId)) {
+        agents.push({
+          agent_id: d.agentId,
+          label: d.agentId,
+          config_model: null,
+          workspace_path: null,
+          files: [],
+          docker: d,
+          status: d.status.startsWith('Up') ? 'running' : d.status.toLowerCase(),
+          config: null,
+        });
+      }
+    }
 
     return NextResponse.json(agents);
   } catch (e: unknown) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
+}
+
+function formatModel(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') {
+    const model = value as { primary?: unknown; model?: unknown; provider?: unknown };
+    if (typeof model.primary === 'string') return model.primary;
+    if (typeof model.model === 'string') return model.provider ? `${String(model.provider)}/${model.model}` : model.model;
+  }
+  return null;
 }

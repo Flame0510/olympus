@@ -1,23 +1,24 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { openDb } from '@/lib/db';
+import { execSync } from 'child_process';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
+export async function GET(_request: NextRequest): Promise<NextResponse> {
   try {
-    const db = openDb();
-    const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-    const rows = db
-      .prepare(
-        `SELECT CASE WHEN INSTR(session_id,':')=0 THEN 'unknown'
-         ELSE SUBSTR(session_id,INSTR(session_id,':')+1,INSTR(SUBSTR(session_id,INSTR(session_id,':')+1),':')-1)
-         END as agent_id
-         FROM sessions WHERE status IN ('active','idle','working') AND updated_at > ?
-         GROUP BY agent_id ORDER BY agent_id`,
-      )
-      .all(twoDaysAgo) as { agent_id: string }[];
-    db.close();
-    return NextResponse.json(rows.map((r) => r.agent_id).filter((id) => id && id !== 'unknown'));
+    // List all Docker containers with AGENT_ID label
+    const output = execSync(
+      'docker ps --filter "label=AGENT_ID" --format "{{.ID}}|{{.Label \"AGENT_ID\"}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}"',
+      { timeout: 5000, encoding: 'utf-8' },
+    ).trim();
+
+    if (!output) return NextResponse.json([]);
+
+    const agents = output.split('\n').map((line) => {
+      const [id, agentId, name, image, status, ports] = line.split('|');
+      return { id, agentId, name, image, status, ports };
+    });
+
+    return NextResponse.json(agents);
   } catch (e: unknown) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }

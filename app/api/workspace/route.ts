@@ -1,151 +1,238 @@
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const ROOT_PATH = '/data/.openclaw';
-const ALLOWED_PREFIX = `${ROOT_PATH}/`;
-const IGNORED_DIRS = new Set(['node_modules', '.trash']);
-const TEXT_EXTENSIONS = new Set(['.md', '.json', '.txt', '.html', '.py', '.css', '.js', '.ts', '.tsx', '.yaml', '.yml', '.env', '.sh']);
+const VPS_ROOT = '/home/nexus/.openclaw/workspace/';
+const IGNORED_DIRS = new Set(['node_modules', '.trash', '.git', '.next', 'cache']);
+const TEXT_EXTENSIONS = new Set(['.md', '.json', '.txt', '.html', '.py', '.css', '.js', '.ts', '.tsx', '.yaml', '.yml', '.env', '.sh', '.mjs', '.cjs', '.jsx']);
 const BINARY_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.pdf', '.ico']);
 const MIME_MAP: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp',
-  '.svg': 'image/svg+xml',
-  '.pdf': 'application/pdf',
-  '.ico': 'image/x-icon',
-  '.html': 'text/html; charset=utf-8',
-  '.md': 'text/markdown; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.txt': 'text/plain; charset=utf-8',
-  '.py': 'text/x-python; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.ts': 'text/typescript; charset=utf-8',
-  '.tsx': 'text/typescript-jsx; charset=utf-8',
-  '.yaml': 'text/yaml; charset=utf-8',
-  '.yml': 'text/yaml; charset=utf-8',
-  '.sh': 'text/x-shellscript; charset=utf-8',
-  '.env': 'text/plain; charset=utf-8',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf', '.ico': 'image/x-icon',
 };
 
-interface TreeEntry {
+interface Workspace {
+  id: string;
+  label: string;
+  type: 'host' | 'container';
   path: string;
-  relPath: string;
-  name: string;
-  type: 'file' | 'directory';
-  size: number;
-  mtimeMs: number;
+  containerName?: string;
 }
 
-function normalizePath(input: string): string {
-  return path.resolve(input).replace(/\\/g, '/');
+function getWorkspace(id: string): Workspace | null {
+  if (id === 'vps') {
+    return { id: 'vps', label: 'VPS Host (Nexus)', type: 'host', path: VPS_ROOT };
+  }
+  if (id.startsWith('container-')) {
+    const name = id.slice(10);
+    return { id, label: name, type: 'container', path: '/root/.openclaw/', containerName: name };
+  }
+  return null;
 }
 
-function isAllowedPath(filePath: unknown): filePath is string {
-  if (!filePath || typeof filePath !== 'string') return false;
-  const normalized = normalizePath(filePath);
-  return normalized === ROOT_PATH || normalized.startsWith(ALLOWED_PREFIX);
-}
+function listWorkspaces(): Workspace[] {
+  const workspaces: Workspace[] = [
+    { id: 'vps', label: 'VPS Host (Nexus)', type: 'host', path: VPS_ROOT },
+  ];
 
-function shouldIgnoreName(name: string): boolean {
-  return IGNORED_DIRS.has(name);
-}
-
-function collectTree(rootDir: string): TreeEntry[] {
-  const entries: TreeEntry[] = [];
-
-  function walk(currentDir: string, relativeDir = ''): void {
-    let dirEntries: fs.Dirent[] = [];
-    try {
-      dirEntries = fs.readdirSync(currentDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of dirEntries) {
-      if (shouldIgnoreName(entry.name)) continue;
-      const absPath = path.join(currentDir, entry.name);
-      const relPath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
-
-      let stat: fs.Stats;
-      try {
-        stat = fs.statSync(absPath);
-      } catch {
-        continue;
+  // Discover container workspaces from Docker
+  try {
+    const output = execSync(
+      'docker ps --filter "label=AGENT_ID" --format "{{.Names}}|{{.Label \"AGENT_ID\"}}"',
+      { timeout: 5000, encoding: 'utf-8' },
+    ).trim();
+    if (output) {
+      for (const line of output.split('\n')) {
+        const [name, agentId] = line.split('|');
+        if (name && agentId) {
+          workspaces.push({
+            id: `container-${name}`,
+            label: `${agentId} (${name})`,
+            type: 'container',
+            path: '/root/.openclaw/',
+            containerName: name,
+          });
+        }
       }
-
-      if (entry.isDirectory()) {
-        entries.push({ path: absPath, relPath, name: entry.name, type: 'directory', size: 0, mtimeMs: stat.mtimeMs });
-        walk(absPath, relPath);
-        continue;
-      }
-
-      const ext = path.extname(entry.name).toLowerCase();
-      if (!TEXT_EXTENSIONS.has(ext) && !BINARY_EXTENSIONS.has(ext)) continue;
-      entries.push({ path: absPath, relPath, name: entry.name, type: 'file', size: stat.size, mtimeMs: stat.mtimeMs });
     }
+  } catch {
+    // Docker not available, host-only
   }
 
-  walk(rootDir);
-  entries.sort((a, b) => {
-    if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
-    return a.relPath.localeCompare(b.relPath);
-  });
+  return workspaces;
+}
+
+function listHostDir(dirPath: string): Record<string, unknown>[] {
+  const entries: Record<string, unknown>[] = [];
+  try {
+    const dirs = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of dirs) {
+      if (IGNORED_DIRS.has(entry.name) || entry.name.startsWith('.')) continue;
+      const absPath = path.join(dirPath, entry.name);
+      const isDir = entry.isDirectory();
+      const stat = fs.statSync(absPath, { throwIfNoEntry: false });
+      entries.push({
+        name: entry.name,
+        isDirectory: isDir,
+        isFile: !isDir,
+        path: absPath,
+        size: stat?.size ?? 0,
+        mtimeMs: stat?.mtimeMs ?? 0,
+      });
+    }
+  } catch { /* empty */ }
   return entries;
+}
+
+function readHostFile(filePath: string): { content: string; isBinary: boolean; buffer?: Buffer } {
+  const ext = path.extname(filePath).toLowerCase();
+  if (BINARY_EXTENSIONS.has(ext)) {
+    return { content: '', isBinary: true, buffer: fs.readFileSync(filePath) };
+  }
+  return { content: fs.readFileSync(filePath, 'utf8'), isBinary: false };
+}
+
+function listContainerDir(containerName: string, dirPath: string): Record<string, unknown>[] {
+  const entries: Record<string, unknown>[] = [];
+  try {
+    const output = execSync(
+      `docker exec ${containerName} ls -1Ap ${dirPath}`,
+      { timeout: 5000, encoding: 'utf-8' },
+    ).trim();
+    if (!output) return entries;
+    for (const name of output.split('\n')) {
+      if (!name || name === '.' || name === '..' || name.startsWith('.') || IGNORED_DIRS.has(name.replace('/', ''))) continue;
+      const isDir = name.endsWith('/');
+      entries.push({ name: isDir ? name.slice(0, -1) : name, isDirectory: isDir, isFile: !isDir });
+    }
+  } catch { /* empty */ }
+  return entries;
+}
+
+function readContainerFile(containerName: string, filePath: string): { content: string; isBinary: boolean } {
+  const ext = path.extname(filePath).toLowerCase();
+  const isBinary = BINARY_EXTENSIONS.has(ext);
+  try {
+    const content = execSync(
+      `docker exec ${containerName} cat ${filePath}`,
+      { timeout: 5000, encoding: 'utf-8' },
+    );
+    return { content: content ?? '', isBinary };
+  } catch {
+    return { content: '', isBinary };
+  }
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const url = new URL(request.url);
-  const tree = url.searchParams.get('tree');
+  const action = url.searchParams.get('action');
+  const ws = url.searchParams.get('workspace');
   const filePath = url.searchParams.get('path');
 
-  if (tree === '1') {
-    return NextResponse.json({ root: ROOT_PATH, entries: collectTree(ROOT_PATH) });
+  // action=list → list available workspaces
+  if (action === 'list') {
+    return NextResponse.json({ workspaces: listWorkspaces() });
   }
 
-  if (!isAllowedPath(filePath)) {
-    return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+  // No workspace specified → error
+  if (!ws) {
+    return NextResponse.json({ error: 'Missing workspace parameter' }, { status: 400 });
   }
 
-  const normalizedPath = normalizePath(filePath);
+  const workspace = getWorkspace(ws);
+  if (!workspace) {
+    return NextResponse.json({ error: `Unknown workspace: ${ws}` }, { status: 400 });
+  }
 
-  try {
-    if (!fs.existsSync(normalizedPath)) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 });
-    }
-    if (fs.statSync(normalizedPath).isDirectory()) {
-      return NextResponse.json({ error: 'Path is a directory' }, { status: 400 });
+  if (workspace.type === 'host') {
+    const targetPath = filePath ? path.resolve(filePath) : workspace.path;
+
+    // Security: allow only VPS_ROOT and subpaths
+    if (!targetPath.startsWith(path.resolve(VPS_ROOT)) && !targetPath.startsWith('/home/nexus/.openclaw/workspace/')) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    const ext = path.extname(normalizedPath).toLowerCase();
-    if (BINARY_EXTENSIONS.has(ext)) {
-      const buffer = fs.readFileSync(normalizedPath);
-      const mime = MIME_MAP[ext] || 'application/octet-stream';
-      return new NextResponse(buffer, {
-        headers: { 'Content-Type': mime, 'Content-Length': String(buffer.length) },
+    if (!fs.existsSync(targetPath)) {
+      return NextResponse.json({ error: 'Path not found' }, { status: 404 });
+    }
+
+    if (fs.statSync(targetPath).isDirectory()) {
+      const files = listHostDir(targetPath);
+      return NextResponse.json({ workspace: ws, label: workspace.label, path: targetPath, type: 'host', files });
+    }
+
+    const result = readHostFile(targetPath);
+    if (result.isBinary && result.buffer) {
+      const mime = MIME_MAP[path.extname(targetPath).toLowerCase()] || 'application/octet-stream';
+      return new NextResponse(result.buffer, {
+        headers: { 'Content-Type': mime, 'Content-Length': String(result.buffer.length) },
       });
     }
 
-    const content = fs.readFileSync(normalizedPath, 'utf8');
-    return NextResponse.json({ content, path: normalizedPath });
-  } catch (e: unknown) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    return NextResponse.json({ workspace: ws, label: workspace.label, path: targetPath, type: 'host', content: result.content });
   }
+
+  // Container workspace
+  if (workspace.type === 'container' && workspace.containerName) {
+    const targetPath = filePath || workspace.path;
+
+    if (filePath) {
+      // Check if it's a directory
+      try {
+        const isDir = execSync(
+          `docker exec ${workspace.containerName} test -d ${targetPath} && echo YES || echo NO`,
+          { timeout: 5000, encoding: 'utf-8' },
+        ).trim();
+        if (isDir === 'YES') {
+          const files = listContainerDir(workspace.containerName, targetPath);
+          return NextResponse.json({ workspace: ws, label: workspace.label, path: targetPath, type: 'container', files });
+        }
+      } catch { /* fall through to read */ }
+    }
+
+    const result = readContainerFile(workspace.containerName, targetPath);
+    return NextResponse.json({ workspace: ws, label: workspace.label, path: targetPath, type: 'container', content: result.content });
+  }
+
+  return NextResponse.json({ error: 'Unsupported workspace type' }, { status: 400 });
 }
 
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = (await request.json()) as { path?: unknown; content?: unknown };
-    const { path: filePath, content } = body ?? {};
-    if (!isAllowedPath(filePath)) return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
-    if (typeof content !== 'string') return NextResponse.json({ error: 'Invalid content' }, { status: 400 });
+    const body = (await request.json()) as { workspace?: string; path?: string; content?: string };
+    const { workspace: ws, path: filePath, content } = body ?? {};
+    if (!ws || !filePath || typeof content !== 'string') {
+      return NextResponse.json({ error: 'Missing workspace, path, or content' }, { status: 400 });
+    }
 
-    const normalizedPath = normalizePath(filePath);
-    fs.writeFileSync(normalizedPath, content, 'utf8');
-    return NextResponse.json({ ok: true });
+    const workspace = getWorkspace(ws);
+    if (!workspace) {
+      return NextResponse.json({ error: `Unknown workspace: ${ws}` }, { status: 400 });
+    }
+
+    if (workspace.type === 'host') {
+      const normalizedPath = path.resolve(filePath);
+      if (!normalizedPath.startsWith(path.resolve(VPS_ROOT))) {
+        return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      }
+      fs.mkdirSync(path.dirname(normalizedPath), { recursive: true });
+      fs.writeFileSync(normalizedPath, content, 'utf8');
+      return NextResponse.json({ ok: true });
+    }
+
+    if (workspace.type === 'container' && workspace.containerName) {
+      execSync(
+        `docker exec -i ${workspace.containerName} sh -c 'mkdir -p $(dirname '${
+          filePath.replace(/'/g, "'\\''")
+        }') && cat > ${filePath.replace(/'/g, "'\\''")}' << 'EOFINNER'\n${content}\nEOFINNER`,
+        { timeout: 10000, encoding: 'utf-8' },
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    return NextResponse.json({ error: 'Unsupported workspace type' }, { status: 400 });
   } catch (e: unknown) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });
   }
